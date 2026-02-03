@@ -1,0 +1,300 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================
+   Site-wide Dark Mode Base Styles
+   ======================================== */
+
+/* Base HTML/Body styling for light/dark modes */
+html {
+    @apply bg-surface-50 text-surface-900;
+}
+
+html.dark {
+    @apply bg-surface-900 text-surface-100;
+}
+
+body {
+    @apply bg-surface-50 text-surface-900 transition-colors duration-300;
+}
+
+.dark body {
+    @apply bg-surface-900 text-surface-100;
+}
+
+/* Ensure #app also follows theme */
+#app {
+    @apply bg-surface-50 text-surface-900 min-h-screen;
+}
+
+.dark #app {
+    @apply bg-surface-900 text-surface-100;
+}
+
+/* ========================================
+   Custom Scrollbar Styles
+   ======================================== */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-surface-100;
+}
+
+.dark ::-webkit-scrollbar-track {
+    @apply bg-surface-800;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-surface-400 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-500;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    @apply bg-surface-600;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-500;
+}
+
+/* PrimeVue input field styling for better appearance */
+.p-inputtext,
+.p-textarea,
+.p-password input,
+.p-select .p-select-label {
+    padding: 0.625rem 0.75rem !important;
+}
+
+/* Ensure Password component input takes full width */
+.p-password {
+    width: 100%;
+}
+
+.p-password input {
+    width: 100%;
+}
+
+/* Dark mode input improvements */
+.dark .p-inputtext,
+.dark .p-textarea,
+.dark .p-password input,
+.dark .p-select {
+    background-color: rgb(30 30 30);
+    border-color: rgb(63 63 70);
+}
+
+.dark .p-inputtext:hover,
+.dark .p-textarea:hover,
+.dark .p-password input:hover,
+.dark .p-select:hover {
+    border-color: rgb(99 102 241);
+}
+
+.dark .p-inputtext:focus,
+.dark .p-textarea:focus,
+.dark .p-password input:focus,
+.dark .p-select:focus {
+    border-color: rgb(99 102 241);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* ========================================
+   PrimeVue TabView Dark Mode Fixes
+   ======================================== */
+
+/* Fix tab text vertical centering */
+.p-tabview .p-tabview-tablist .p-tabview-tab-header {
+    display: flex;
+    align-items: center;
+}
+
+.p-tabview .p-tabview-tablist {
+    display: flex;
+    align-items: center;
+}
+
+.p-tabview .p-tabview-tablist .p-tabview-nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ========================================
+   Dark Mode Text Visibility Fixes
+   ======================================== */
+
+/* Fix text-surface-900 visibility in dark mode globally */
+.dark .text-surface-900 {
+    color: rgb(248 250 252) !important;
+}
+
+/* PrimeVue Dialog/Modal text in dark mode */
+.dark .p-dialog .p-dialog-content {
+    color: rgb(226 232 240);
+}
+
+.dark .p-dialog .p-dialog-header {
+    color: rgb(248 250 252);
+}
+
+/* PrimeVue Card text in dark mode */
+.dark .p-card .p-card-body {
+    color: rgb(226 232 240);
+}
+
+/* ========================================
+   Button Styling Improvements
+   ======================================== */
+
+/* Base button: padding, font, radius, transition */
+.p-button {
+    padding: 0.625rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    gap: 0.5rem;
+}
+
+/* Small buttons */
+.p-button-sm,
+.p-button[data-pc-severity][size="small"] {
+    padding: 0.4rem 0.875rem;
+    font-size: 0.8125rem;
+}
+
+/* Large buttons */
+.p-button-lg,
+.p-button[size="large"] {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}
+
+/* Icon-only buttons (rounded toggle-style) */
+.p-button-icon-only {
+    padding: 0.625rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Ensure icons are centered in icon-only buttons */
+.p-button-icon-only .p-button-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Remove any pseudo-elements that might affect icon-only buttons */
+.p-button-icon-only::before,
+.p-button-icon-only::after {
+    display: none;
+}
+
+/* Fix PrimeVue button icon positioning */
+.p-button .p-button-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Primary / filled buttons */
+.p-button:not(.p-button-outlined):not(.p-button-text):not(.p-button-link) {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.p-button:not(.p-button-outlined):not(.p-button-text):not(.p-button-link):hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+.p-button:not(.p-button-outlined):not(.p-button-text):not(.p-button-link):active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Outlined buttons */
+.p-button-outlined {
+    border-width: 1.5px;
+}
+
+/* Secondary filled buttons - More visible styling */
+.p-button-secondary:not(.p-button-outlined):not(.p-button-text) {
+    background-color: rgb(100 116 139);
+    border-color: rgb(100 116 139);
+    color: white !important;
+    font-weight: 600;
+}
+
+.p-button-secondary:not(.p-button-outlined):not(.p-button-text):hover {
+    background-color: rgb(71 85 105);
+    border-color: rgb(71 85 105);
+    color: white !important;
+}
+
+.dark .p-button-secondary:not(.p-button-outlined):not(.p-button-text) {
+    background-color: rgb(71 85 105);
+    border-color: rgb(71 85 105);
+    color: white !important;
+}
+
+.dark .p-button-secondary:not(.p-button-outlined):not(.p-button-text):hover {
+    background-color: rgb(100 116 139);
+    border-color: rgb(100 116 139);
+    color: white !important;
+}
+
+/* Text buttons */
+.p-button-text {
+    padding: 0.5rem 0.75rem;
+}
+
+.p-button-text:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+    text-decoration: none;
+}
+
+.dark .p-button-text:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ========================================
+   PrimeVue Tooltip Fixes
+   ======================================== */
+
+/* Ensure tooltips are visible and properly styled */
+.p-tooltip {
+    z-index: 10000 !important;
+}
+
+.p-tooltip .p-tooltip-text {
+    background-color: rgb(30 41 59);
+    color: rgb(248 250 252);
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    max-width: 300px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.p-tooltip .p-tooltip-arrow {
+    border-color: transparent;
+}
+
+.p-tooltip-top .p-tooltip-arrow {
+    border-top-color: rgb(30 41 59);
+}
+
+.p-tooltip-bottom .p-tooltip-arrow {
+    border-bottom-color: rgb(30 41 59);
+}

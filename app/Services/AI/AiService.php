@@ -217,7 +217,9 @@ class AiService
         // Phase 1.2 + 2.1: Product search - respect agent-level enable_product_search setting
         $enableProductSearch = $activeConfig['enable_product_search'] ?? true;
         $relevantProducts = [];
-        if ($enableProductSearch && $this->shouldSearchProducts($customerMessage, $mediaContext ?? [], $conversation)) {
+        $productSearchResult = $this->shouldSearchProducts($customerMessage, $mediaContext ?? [], $conversation);
+
+        if ($enableProductSearch && $productSearchResult['should_search']) {
             // Search for relevant products using ProductRagService
             $productRagService = new ProductRagService();
 
@@ -252,11 +254,13 @@ class AiService
                 'query' => $productSearchQuery,
                 'filters' => $filters,
                 'products_found' => count($relevantProducts),
+                'trigger_reason' => $productSearchResult['reason'],
             ]);
         } else {
+            $skipReason = !$enableProductSearch ? 'disabled_by_personality' : $productSearchResult['reason'];
             Log::info('AiService: Product search skipped', [
                 'company_id' => $this->company->id,
-                'reason' => !$enableProductSearch ? 'disabled_by_personality' : 'no_product_intent',
+                'reason' => $skipReason,
                 'message' => substr($customerMessage, 0, 100),
             ]);
         }
@@ -962,8 +966,10 @@ class AiService
     /**
      * Phase 1.2: Determine if we should search products based on message intent
      * Saves ~200-500ms latency + ~500 tokens for non-product messages
+     *
+     * @return array{should_search: bool, reason: string}
      */
-    protected function shouldSearchProducts(string $message, array $mediaContext, Conversation $conversation): bool
+    protected function shouldSearchProducts(string $message, array $mediaContext, Conversation $conversation): array
     {
         // Skip if company has no products (cache check for 5 minutes)
         $hasProducts = Cache::remember(
@@ -973,19 +979,19 @@ class AiService
         );
 
         if (!$hasProducts) {
-            return false;
+            return ['should_search' => false, 'reason' => 'no_products_in_company'];
         }
 
         // If media context indicates product search (customer sent product image)
         if (!empty($mediaContext['product_search'])) {
-            return true;
+            return ['should_search' => true, 'reason' => 'media_product_search'];
         }
 
         // Product intent keywords (English + common Malay/Chinese terms)
         $keywords = [
             // English
-            'price', 'buy', 'cost', 'product', 'show', 'recommend', 'stock', 'order',
-            'purchase', 'available', 'catalog', 'how much', 'item', 'sell', 'shop',
+            'price', 'buy', 'cost', 'product', 'products', 'show', 'recommend', 'stock', 'order',
+            'purchase', 'available', 'catalog', 'how much', 'item', 'items', 'sell', 'shop',
             'checkout', 'cart', 'delivery', 'shipping', 'discount', 'sale', 'promo',
             'offer', 'deal', 'cheap', 'expensive', 'budget', 'compare', 'option',
             // Malay
@@ -995,10 +1001,10 @@ class AiService
             '价格', '买', '产品', '多少钱', '有货', '便宜', '贵', '折扣', '促销',
         ];
 
-        $messageLower = strtolower($message);
+        $messageLower = mb_strtolower($message);
         foreach ($keywords as $keyword) {
-            if (stripos($messageLower, strtolower($keyword)) !== false) {
-                return true;
+            if (mb_stripos($messageLower, $keyword) !== false) {
+                return ['should_search' => true, 'reason' => "keyword_match:{$keyword}"];
             }
         }
 
@@ -1010,16 +1016,16 @@ class AiService
             ->implode(' ');
 
         if ($recentMessages) {
-            $recentLower = strtolower($recentMessages);
+            $recentLower = mb_strtolower($recentMessages);
             // Only check core product keywords in history to avoid false positives
-            $coreKeywords = ['product', 'price', 'buy', 'order', 'harga', 'beli', '价格', '买'];
+            $coreKeywords = ['product', 'products', 'price', 'buy', 'order', 'harga', 'beli', '价格', '买'];
             foreach ($coreKeywords as $keyword) {
-                if (stripos($recentLower, strtolower($keyword)) !== false) {
-                    return true;
+                if (mb_stripos($recentLower, $keyword) !== false) {
+                    return ['should_search' => true, 'reason' => "history_keyword:{$keyword}"];
                 }
             }
         }
 
-        return false;
+        return ['should_search' => false, 'reason' => 'no_product_intent'];
     }
 }

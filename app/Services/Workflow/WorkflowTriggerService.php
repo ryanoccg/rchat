@@ -12,6 +12,7 @@ use App\Models\Message;
 use App\Models\Workflow;
 use App\Models\WorkflowExecution;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class WorkflowTriggerService
@@ -86,12 +87,51 @@ class WorkflowTriggerService
      * Trigger workflows when a message is received.
      * This is the sole entry point for AI auto-response (via workflows).
      * Falls back to direct AI response if no workflows are configured.
+     *
+     * CRITICAL: The delayed AI response is scheduled HERE (synchronously) to ensure proper message batching.
+     * If we scheduled it inside workflow jobs (async), each message would create its own delayed job.
      */
     public function onMessageReceived(Message $message): void
     {
         $conversation = $message->conversation;
         $customer = $conversation->customer;
         $company = $conversation->company;
+
+        // CRITICAL: Check if AI handling is enabled BEFORE scheduling delayed response
+        if (!$conversation->is_ai_handling) {
+            Log::channel('ai')->info('WorkflowTriggerService: AI handling disabled, skipping delayed response', [
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+            ]);
+            return;
+        }
+
+        // Get AI configuration to verify auto-respond is enabled
+        $aiConfig = AiConfiguration::where('company_id', $company->id)->first();
+        if (!$aiConfig || !$aiConfig->auto_respond) {
+            Log::channel('ai')->info('WorkflowTriggerService: Auto-respond disabled, skipping delayed response', [
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+            ]);
+            return;
+        }
+
+        // CRITICAL: Schedule delayed AI response HERE (synchronously during webhook)
+        // This ensures multiple messages within the delay window are batched together
+        // The workflow execution (async) will NOT schedule its own AI response
+        ProcessDelayedAiResponse::scheduleForConversation(
+            $conversation->id,
+            $message->id
+        );
+
+        Log::channel('ai')->info('WorkflowTriggerService: Scheduled delayed AI response for message', [
+            'conversation_id' => $conversation->id,
+            'message_id' => $message->id,
+        ]);
+
+        // Note: Workflows are still executed for other actions (tags, assignment, etc.)
+        // But send_ai_response actions should be skipped since we already scheduled above
+        // This is handled by checking if a delayed response is already scheduled
 
         $workflowsExecuted = false;
 
@@ -125,11 +165,8 @@ class WorkflowTriggerService
             }
         }
 
-        // FALLBACK: If no workflows were executed and AI handling is enabled,
-        // use legacy direct AI response (for companies without workflows configured)
-        if (!$workflowsExecuted && $conversation->is_ai_handling) {
-            $this->triggerFallbackAiResponse($message, $conversation, $company);
-        }
+        // No need for fallback - we already scheduled delayed response above
+        // This is a change from the previous behavior where fallback was conditional
     }
 
     /**
@@ -141,14 +178,14 @@ class WorkflowTriggerService
         $aiConfig = AiConfiguration::where('company_id', $company->id)->first();
 
         if (!$aiConfig || !$aiConfig->auto_respond) {
-            Log::info('WorkflowTriggerService: Fallback skipped - auto-respond disabled', [
+            Log::channel('ai')->info('WorkflowTriggerService: Fallback skipped - auto-respond disabled', [
                 'message_id' => $message->id,
                 'conversation_id' => $conversation->id,
             ]);
             return;
         }
 
-        Log::info('WorkflowTriggerService: Using fallback AI response (no workflows)', [
+        Log::channel('ai')->info('WorkflowTriggerService: Using fallback AI response (no workflows)', [
             'message_id' => $message->id,
             'conversation_id' => $conversation->id,
             'company_id' => $company->id,
@@ -243,6 +280,28 @@ class WorkflowTriggerService
             return null;
         }
 
+        // CRITICAL: Use atomic cache lock to prevent race conditions
+        // Multiple messages arriving quickly could all pass the active_workflow_execution_id check
+        // before any of them sets it, causing duplicate workflow executions
+        $lockKey = "workflow_executing_{$conversation->id}_{$workflow->id}";
+        if (Cache::has($lockKey)) {
+            Log::channel('ai')->info('WorkflowTriggerService: Workflow already executing for conversation', [
+                'conversation_id' => $conversation->id,
+                'workflow_id' => $workflow->id,
+            ]);
+            return null;
+        }
+
+        // Acquire lock for 60 seconds (should be enough for workflow to start)
+        Cache::put($lockKey, true, 60);
+
+        // Double-check after acquiring lock (in case another request just set active_workflow_execution_id)
+        $conversation->refresh();
+        if ($conversation->active_workflow_execution_id) {
+            Cache::forget($lockKey);
+            return null;
+        }
+
         // Create workflow execution
         $execution = WorkflowExecution::create([
             'company_id' => $workflow->company_id,
@@ -262,6 +321,9 @@ class WorkflowTriggerService
         if (isset($eventData['customer'])) {
             $eventData['customer']->update(['last_workflow_execution_at' => now()]);
         }
+
+        // Release the lock once conversation is marked as having active execution
+        Cache::forget($lockKey);
 
         // Dispatch job to execute workflow
         ExecuteWorkflow::dispatch($execution);

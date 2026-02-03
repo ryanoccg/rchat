@@ -22,6 +22,7 @@ class CompanyObserver
         $this->ensureAiConfigurationExists($company);
         $this->initializeDefaultAiPersonalities($company);
         $this->initializeDefaultWorkflows($company);
+        $this->initializeIntentWorkflow($company);
     }
 
     /**
@@ -350,6 +351,36 @@ Key guidelines:
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to create default workflow for company', [
+                'company_id' => $company->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Initialize intent-based routing workflow for the company.
+     * This creates a workflow that classifies customer intent and routes to optimized AI responses.
+     */
+    protected function initializeIntentWorkflow(Company $company): void
+    {
+        // Check if intent workflow already exists
+        $existing = Workflow::where('company_id', $company->id)
+            ->where('name', 'Intent-Based Routing')
+            ->first();
+
+        if ($existing) {
+            return;
+        }
+
+        try {
+            $seeder = new \Database\Seeders\IntentWorkflowSeeder();
+            $seeder->createWorkflow($company);
+
+            Log::info('Created intent-based routing workflow for company', [
+                'company_id' => $company->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('Failed to create intent workflow for company', [
                 'company_id' => $company->id,
                 'error' => $e->getMessage(),
             ]);

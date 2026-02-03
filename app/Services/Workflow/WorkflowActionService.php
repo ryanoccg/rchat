@@ -2,6 +2,7 @@
 
 namespace App\Services\Workflow;
 
+use App\Jobs\ProcessDelayedAiResponse;
 use App\Models\WorkflowExecution;
 use App\Services\AI\AiService;
 use App\Services\Messaging\MessageHandlerFactory;
@@ -107,12 +108,12 @@ class WorkflowActionService
                                 $conversation->customer->platform_user_id,
                                 $imgUrl
                             );
-                            Log::info('WorkflowActionService: Product image sent', [
+                            Log::channel('ai')->info('WorkflowActionService: Product image sent', [
                                 'conversation_id' => $conversation->id,
                                 'image_url' => $imgUrl,
                             ]);
                         } catch (\Exception $e) {
-                            Log::warning('WorkflowActionService: Failed to send product image', [
+                            Log::channel('ai')->warning('WorkflowActionService: Failed to send product image', [
                                 'conversation_id' => $conversation->id,
                                 'image_url' => $imgUrl,
                                 'error' => $e->getMessage(),
@@ -135,7 +136,7 @@ class WorkflowActionService
                                 $imgUrl
                             );
                         } catch (\Exception $e) {
-                            Log::warning('WorkflowActionService: Failed to send product image', [
+                            Log::channel('ai')->warning('WorkflowActionService: Failed to send product image', [
                                 'conversation_id' => $conversation->id,
                                 'image_url' => $imgUrl,
                                 'error' => $e->getMessage(),
@@ -197,6 +198,10 @@ class WorkflowActionService
      * - additional_context: Extra instructions appended to prompt
      * - enable_product_search: Override agent's product search setting
      * - rag_top_k: Override agent's RAG chunk count
+     *
+     * Uses delayed response mechanism to batch multiple messages together.
+     * NOTE: The delayed response is already scheduled in WorkflowTriggerService::onMessageReceived()
+     * This method just acknowledges it and ensures workflow options are applied if needed.
      */
     protected function generateAndSendAIResponse(array $config, array $context, WorkflowExecution $execution): array
     {
@@ -215,25 +220,99 @@ class WorkflowActionService
         $enableProductSearch = $config['enable_product_search'] ?? null;
         $ragTopK = $config['rag_top_k'] ?? null;
 
-        $result = $this->executeAIResponse(
+        // Parse any template variables in the additional context
+        $parsedAdditionalContext = null;
+        if ($additionalContext) {
+            $parsedAdditionalContext = $this->parseMessageTemplate($additionalContext, $context);
+        }
+
+        // Check if a delayed AI response is already scheduled for this conversation
+        $pendingJobKey = "ai_pending_job_{$conversation->id}";
+        $firstMessageKey = "ai_first_message_{$conversation->id}";
+
+        $hasPendingJob = \Cache::has($pendingJobKey);
+        $hasFirstMessage = \Cache::has($firstMessageKey);
+
+        // CRITICAL: Also check if any recent customer messages have been processed by AI
+        // This catches the case where the delayed job already executed and cleared the cache
+        $hasRecentProcessedMessages = \App\Models\Message::where('conversation_id', $conversation->id)
+            ->where('sender_type', 'customer')
+            ->whereNotNull('ai_processed_at')
+            ->where('ai_processed_at', '>=', now()->subSeconds(35)) // Messages processed in last 35 seconds
+            ->exists();
+
+        if ($hasPendingJob || $hasFirstMessage || $hasRecentProcessedMessages) {
+            // A delayed response is already scheduled or recently completed - don't create another one
+            Log::channel('ai')->info('WorkflowActionService: Delayed AI response already scheduled/recent, skipping duplicate', [
+                'conversation_id' => $conversation->id,
+                'workflow_execution_id' => $execution->id,
+                'has_pending_job' => $hasPendingJob,
+                'has_first_message' => $hasFirstMessage,
+                'has_recent_processed' => $hasRecentProcessedMessages,
+            ]);
+
+            return [
+                'success' => true,
+                'skipped' => 'already_scheduled',
+                'context' => ['ai_response_already_scheduled' => true],
+            ];
+        }
+
+        // Get the message that triggered this workflow
+        $message = $context['message'] ?? null;
+        if (!$message || (is_array($message) && isset($message['id']))) {
+            $messageId = is_array($message) ? $message['id'] : null;
+            if (!$messageId) {
+                // Get the latest customer message from conversation
+                $latestMessage = \App\Models\Message::where('conversation_id', $conversation->id)
+                    ->where('sender_type', 'customer')
+                    ->latest()
+                    ->first();
+                $messageId = $latestMessage?->id;
+            }
+        } elseif (is_object($message)) {
+            $messageId = $message->id;
+        } else {
+            $messageId = null;
+        }
+
+        if (!$messageId) {
+            Log::warning('WorkflowActionService: No message ID found for delayed AI response', [
+                'conversation_id' => $conversation->id,
+                'workflow_execution_id' => $execution->id,
+            ]);
+            return [
+                'success' => false,
+                'error' => 'No message found to trigger AI response',
+            ];
+        }
+
+        // Schedule delayed AI response with all workflow options
+        ProcessDelayedAiResponse::scheduleForConversation(
+            $conversation->id,
+            $messageId,
+            null, // Use configured delay from AI config
+            $aiAgentId,
             $systemPrompt,
             $promptTemplate,
-            $context,
-            $execution,
-            $aiAgentId,
-            $additionalContext,
+            $parsedAdditionalContext,
             $enableProductSearch,
             $ragTopK
         );
 
-        // Send the AI-generated message
-        $sendMessageConfig = [
-            'message' => $result['response'] ?? '',
-            'image_url' => null,
-            'attachment_url' => null,
-        ];
+        Log::channel('ai')->info('WorkflowActionService: Scheduled delayed AI response', [
+            'conversation_id' => $conversation->id,
+            'message_id' => $messageId,
+            'workflow_execution_id' => $execution->id,
+            'ai_agent_id' => $aiAgentId,
+            'has_custom_prompt' => !is_null($systemPrompt),
+        ]);
 
-        return $this->sendMessage($sendMessageConfig, $context, $execution);
+        return [
+            'success' => true,
+            'scheduled' => true,
+            'context' => ['ai_response_scheduled' => true],
+        ];
     }
 
     /**

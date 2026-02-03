@@ -9,6 +9,42 @@ class Message extends Model
 {
     use HasFactory;
 
+    // Intent constants
+    public const INTENT_GENERAL_INQUIRY = 'general_inquiry';
+    public const INTENT_ASK_FOR_SERVICE = 'ask_for_service';
+    public const INTENT_CUSTOMER_SERVICE = 'customer_service';
+    public const INTENT_COMPANY_INFORMATION = 'company_information';
+    public const INTENT_PRODUCT_INQUIRY = 'product_inquiry';
+
+    /**
+     * All available intent types
+     */
+    public static function allIntents(): array
+    {
+        return [
+            self::INTENT_GENERAL_INQUIRY,
+            self::INTENT_ASK_FOR_SERVICE,
+            self::INTENT_CUSTOMER_SERVICE,
+            self::INTENT_COMPANY_INFORMATION,
+            self::INTENT_PRODUCT_INQUIRY,
+        ];
+    }
+
+    /**
+     * Get human-readable label for intent
+     */
+    public static function getIntentLabel(string $intent): string
+    {
+        return match($intent) {
+            self::INTENT_GENERAL_INQUIRY => 'General Inquiry',
+            self::INTENT_ASK_FOR_SERVICE => 'Ask for Service',
+            self::INTENT_CUSTOMER_SERVICE => 'Customer Service',
+            self::INTENT_COMPANY_INFORMATION => 'Company Information',
+            self::INTENT_PRODUCT_INQUIRY => 'Product Inquiry',
+            default => 'Unknown',
+        };
+    }
+
     protected $fillable = [
         'conversation_id',
         'sender_id',
@@ -25,6 +61,10 @@ class Message extends Model
         'read_at',
         'ai_processed_at',
         'quoted_message_id',
+        // Intent classification fields
+        'intent',
+        'intent_confidence',
+        'intent_classified_at',
     ];
 
     protected function casts(): array
@@ -36,6 +76,9 @@ class Message extends Model
             'ai_response_data' => 'array',
             'read_at' => 'datetime',
             'ai_processed_at' => 'datetime',
+            // Intent classification casts
+            'intent_confidence' => 'decimal:2',
+            'intent_classified_at' => 'datetime',
         ];
     }
 

@@ -61,7 +61,7 @@ class AiRateLimiter
         $ttl = now()->endOfDay()->diffInSeconds(now());
         Cache::put($key, $current + 1, $ttl);
 
-        Log::debug('AI request recorded', [
+        Log::channel('ai')->debug('AI request recorded', [
             'provider' => $provider,
             'model' => $model,
             'count' => $current + 1,
@@ -125,8 +125,8 @@ class AiRateLimiter
     public static function rateLimitedResponse(string $provider, string $model): AiResponseInterface
     {
         $usage = self::getUsage($provider, $model);
-        
-        Log::warning('AI rate limit exceeded', [
+
+        Log::channel('ai')->warning('AI rate limit exceeded', [
             'provider' => $provider,
             'model' => $model,
             'usage' => $usage,

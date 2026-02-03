@@ -28,7 +28,7 @@ class ProductRagService
      */
     public function searchProducts(Company $company, string $query, array $filters = [], int $limit = 5): array
     {
-        Log::info('ProductRagService: Searching products', [
+        Log::channel('ai')->info('ProductRagService: Searching products', [
             'company_id' => $company->id,
             'query' => $query,
             'filters' => $filters,
@@ -81,7 +81,7 @@ class ProductRagService
             $results = array_slice($results, 0, $limit);
 
             if (!empty($results)) {
-                Log::info('ProductRagService: Semantic search results', [
+                Log::channel('ai')->info('ProductRagService: Semantic search results', [
                     'count' => count($results),
                 ]);
                 return $results;
@@ -91,7 +91,7 @@ class ProductRagService
         // Step 4: Fallback to keyword search
         $keywordResults = $this->keywordSearch($baseQuery, $query, $limit);
 
-        Log::info('ProductRagService: Keyword search results', [
+        Log::channel('ai')->info('ProductRagService: Keyword search results', [
             'count' => count($keywordResults),
         ]);
 
@@ -107,7 +107,7 @@ class ProductRagService
         $queryEmbedding = $this->embeddingService->createEmbedding($query);
 
         if (!$queryEmbedding) {
-            Log::warning('ProductRagService: Failed to create query embedding');
+            Log::channel('ai')->warning('ProductRagService: Failed to create query embedding');
             return [];
         }
 
@@ -146,7 +146,7 @@ class ProductRagService
         $results = array_filter($results, fn($r) => $r['score'] >= $minThreshold);
         $results = array_slice($results, 0, $limit);
 
-        Log::info('ProductRagService: Semantic search found unique products', [
+        Log::channel('ai')->info('ProductRagService: Semantic search found unique products', [
             'total_embeddings' => count($embeddings),
             'unique_products' => count($productScores),
             'above_threshold' => count($results),
@@ -210,7 +210,7 @@ class ProductRagService
             $products = $products->concat($fullQueryProducts);
         }
 
-        Log::info('ProductRagService: Keyword search results', [
+        Log::channel('ai')->info('ProductRagService: Keyword search results', [
             'query' => $query,
             'keywords' => $keywords,
             'products_found' => $products->count(),
@@ -225,7 +225,7 @@ class ProductRagService
      */
     public function searchByImageDescription(Company $company, string $imageDescription, int $limit = 5): array
     {
-        Log::info('ProductRagService: Image-based product search', [
+        Log::channel('ai')->info('ProductRagService: Image-based product search', [
             'company_id' => $company->id,
             'description' => $imageDescription,
         ]);

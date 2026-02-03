@@ -95,9 +95,18 @@ export const useWorkflowsStore = defineStore('workflows', {
             { value: 'customer_attribute', label: 'Customer Attribute', description: 'Check customer properties' },
             { value: 'conversation_attribute', label: 'Conversation Attribute', description: 'Check conversation properties' },
             { value: 'message_content', label: 'Message Content', description: 'Check message text' },
+            { value: 'intent_value', label: 'Intent Value', description: 'Match classified customer intent' },
             { value: 'time_of_day', label: 'Time of Day', description: 'Check current time' },
             { value: 'day_of_week', label: 'Day of Week', description: 'Check current day' },
             { value: 'ai_condition', label: 'AI Evaluation', description: 'Use AI to evaluate condition' }
+        ],
+
+        intentTypes: () => [
+            { value: 'general_inquiry', label: 'General Inquiry', description: 'Greetings, casual chat' },
+            { value: 'ask_for_service', label: 'Ask for Service', description: 'Booking, appointments' },
+            { value: 'customer_service', label: 'Customer Service', description: 'Complaints, support issues' },
+            { value: 'company_information', label: 'Company Information', description: 'Hours, location, policies' },
+            { value: 'product_inquiry', label: 'Product Inquiry', description: 'Products, prices, availability' }
         ],
 
         activeFiltersCount: (state) => {

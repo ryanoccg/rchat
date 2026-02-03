@@ -301,16 +301,16 @@ class WebChatController extends Controller
         ];
 
         // Generate AI response if enabled
-        \Log::info('WebChat: Checking AI handling', [
+        \Log::channel('ai')->info('WebChat: Checking AI handling', [
             'conversation_id' => $conversation->id,
             'is_ai_handling' => $conversation->is_ai_handling,
             'message' => $request->message,
         ]);
-        
+
         if ($conversation->is_ai_handling) {
             try {
                 // Always use AiService for consistent RAG handling across all platforms
-                \Log::info('WebChat: Using AiService for message handling', [
+                \Log::channel('ai')->info('WebChat: Using AiService for message handling', [
                     'conversation_id' => $conversation->id,
                     'message' => $request->message,
                 ]);

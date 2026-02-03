@@ -13,7 +13,7 @@ class ConversationObserver
      */
     public function created(Conversation $conversation): void
     {
-        Log::info('Conversation created', [
+        Log::channel('ai')->info('Conversationcreated', [
             'conversation_id' => $conversation->id,
             'company_id' => $conversation->company_id,
             'customer_id' => $conversation->customer_id,
@@ -37,7 +37,7 @@ class ConversationObserver
     {
         // Check if status changed to closed
         if ($conversation->wasChanged('status') && $conversation->status === 'closed') {
-            Log::info('Conversation closed', [
+            Log::channel('ai')->info('Conversationclosed', [
                 'conversation_id' => $conversation->id,
                 'company_id' => $conversation->company_id,
                 'closed_reason' => $conversation->closed_reason,

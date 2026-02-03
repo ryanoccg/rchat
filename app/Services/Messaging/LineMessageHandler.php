@@ -152,4 +152,58 @@ class LineMessageHandler extends AbstractMessageHandler
             default => '',
         };
     }
+
+    /**
+     * Fetch user profile from LINE API
+     */
+    public function fetchUserProfile(PlatformConnection $connection, string $userId): ?array
+    {
+        $channelAccessToken = $connection->credentials['channel_access_token'] ?? null;
+
+        if (!$channelAccessToken) {
+            Log::warning('Cannot fetch LINE profile - missing channel access token', [
+                'connection_id' => $connection->id,
+            ]);
+            return null;
+        }
+
+        try {
+            $response = Http::withToken($channelAccessToken)
+                ->get(self::API_URL . "/profile/{$userId}");
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                return [
+                    'name' => $data['displayName'] ?? null,
+                    'profile_pic' => $data['pictureUrl'] ?? null,
+                    'status_message' => $data['statusMessage'] ?? null,
+                    'language' => $data['language'] ?? null,
+                ];
+            }
+
+            Log::warning('LINE profile fetch failed', [
+                'user_id' => $userId,
+                'status' => $response->status(),
+                'response' => $response->json(),
+            ]);
+
+            return null;
+        } catch (\Exception $e) {
+            Log::error('LINE profile fetch error', [
+                'user_id' => $userId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Get the platform identifier for this handler
+     */
+    protected function getPlatformIdentifier(): ?string
+    {
+        return 'line';
+    }
 }

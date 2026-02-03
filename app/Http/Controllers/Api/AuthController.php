@@ -62,9 +62,9 @@ class AuthController extends Controller
         // Generate token
         $token = $user->createToken('auth-token')->plainTextToken;
 
+        // Return minimal response - user already includes current_company via the resource
         return response()->json([
             'user' => new UserResource($user->load('currentCompany')),
-            'company' => new CompanyResource($company),
             'token' => $token,
         ], 201);
     }

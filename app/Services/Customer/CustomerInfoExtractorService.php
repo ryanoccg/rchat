@@ -80,7 +80,7 @@ class CustomerInfoExtractorService
 
         if (!empty($updates)) {
             $customer->update($updates);
-            Log::info('Customer info updated from message', [
+            Log::channel('ai')->info('Customer info updated from message', [
                 'customer_id' => $customer->id,
                 'message_id' => $message->id,
                 'fields_updated' => $changes,

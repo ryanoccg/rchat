@@ -135,8 +135,8 @@
                 >
                     <!-- Connection Lines SVG -->
                     <svg
-                        class="absolute inset-0 w-full h-full pointer-events-none"
-                        style="z-index: 0;"
+                        class="absolute inset-0 w-full h-full"
+                        style="z-index: 1; pointer-events: none;"
                     >
                         <defs>
                             <marker
@@ -150,7 +150,7 @@
                                 <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
                             </marker>
                         </defs>
-                        <g v-for="connection in connections" :key="connection.id" class="connection-group">
+                        <g v-for="connection in connections" :key="connection.id" class="connection-group" style="pointer-events: auto;">
                             <!-- Invisible wider hit area for clicking -->
                             <path
                                 :d="getConnectionPath(connection)"
@@ -158,6 +158,7 @@
                                 stroke="transparent"
                                 stroke-width="14"
                                 class="cursor-pointer"
+                                style="pointer-events: stroke;"
                                 @click.stop="confirmRemoveConnection(connection)"
                             />
                             <!-- Visible line with hover effect -->
@@ -185,11 +186,12 @@
                                 :transform="`translate(${connection.labelX}, ${connection.labelY + 20})`"
                                 @click.stop="confirmRemoveConnection(connection)"
                                 v-tooltip.bottom="'Click to remove connection'"
-                                style="cursor: pointer;"
+                                style="cursor: pointer; pointer-events: auto;"
                             >
                                 <circle
                                     r="10"
                                     fill="#ef4444"
+                                    style="pointer-events: auto;"
                                 />
                                 <text
                                     text-anchor="middle"
@@ -396,9 +398,20 @@
                     </div>
                     <div v-if="selectedStep.config.condition_type && selectedStep.config.condition_type !== 'ai_condition'">
                         <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
-                            Field
+                            {{ selectedStep.config.condition_type === 'intent_value' ? 'Intent' : 'Field' }}
                         </label>
                         <Dropdown
+                            v-if="selectedStep.config.condition_type === 'intent_value'"
+                            v-model="selectedStep.config.intent"
+                            :options="store.intentTypes"
+                            optionLabel="label"
+                            optionValue="value"
+                            class="w-full"
+                            placeholder="Select intent"
+                            @change="updateStep"
+                        />
+                        <Dropdown
+                            v-else
                             v-model="selectedStep.config.field"
                             :options="getConditionFieldOptions(selectedStep.config.condition_type)"
                             optionLabel="label"
@@ -409,7 +422,7 @@
                             @change="updateStep"
                         />
                     </div>
-                    <div v-if="selectedStep.config.condition_type && selectedStep.config.condition_type !== 'ai_condition'">
+                    <div v-if="selectedStep.config.condition_type && selectedStep.config.condition_type !== 'ai_condition' && selectedStep.config.condition_type !== 'intent_value'">
                         <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                             Operator
                         </label>
@@ -431,16 +444,24 @@
                             v-model="selectedStep.config.ai_prompt"
                             rows="3"
                             class="w-full"
-                            placeholder="e.g., Is the customer asking about a refund?"
+                            placeholder="e.g., Classify the customer intent into one of these categories..."
                             @input="updateStep"
                         />
                         <InputText
-                            v-else
+                            v-else-if="selectedStep.config.condition_type !== 'intent_value'"
                             v-model="selectedStep.config.value"
                             class="w-full"
                             placeholder="Value to compare"
                             @input="updateStep"
                         />
+                    </div>
+                    <!-- AI Condition Options -->
+                    <div v-if="selectedStep.config.condition_type === 'ai_condition'" class="space-y-2">
+                        <label class="flex items-center gap-2 text-sm text-surface-700 dark:text-surface-300">
+                            <Checkbox v-model="selectedStep.config.return_result" binary @change="updateStep" />
+                            Return structured result (for intent classification)
+                        </label>
+                        <small class="text-surface-500 block">When enabled, AI returns JSON data instead of true/false. Use for intent classification.</small>
                     </div>
                     <div v-if="selectedStep.config.condition_type === 'time_of_day'">
                         <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
@@ -690,6 +711,7 @@ function getConditionFieldOptions(conditionType) {
             { value: 'text', label: 'Text Content' },
             { value: 'type', label: 'Message Type' },
         ],
+        intent_value: store.intentTypes || [],
         time_of_day: [
             { value: 'hour', label: 'Hour' },
         ],

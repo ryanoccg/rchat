@@ -460,6 +460,24 @@
           <label class="block text-sm font-medium mb-2">Description</label>
           <Textarea v-model="editingItem.description" class="w-full" rows="3" />
         </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">File URL</label>
+          <div class="flex items-center gap-2">
+            <InputText
+              :value="editingItem.url"
+              readonly
+              class="w-full text-sm bg-surface-50 dark:bg-surface-900"
+              @focus="$event.target.select()"
+            />
+            <Button
+              icon="pi pi-copy"
+              outlined
+              v-tooltip="'Copy URL'"
+              @click="copyUrl(editingItem?.url)"
+            />
+          </div>
+        </div>
       </div>
       <template #footer>
         <Button label="Cancel" outlined @click="showEditModal = false" />
@@ -514,19 +532,38 @@
         </DataTable>
       </div>
       <template #footer>
-        <Button label="Close" @click="showPreviewModal = false" />
-        <Button
-          v-if="previewItem && !previewItem.ai_analysis"
-          label="Analyze with AI"
-          icon="pi pi-sparkles"
-          outlined
-          @click="analyzePreview"
-        />
-        <Button
-          label="Edit"
-          icon="pi pi-pencil"
-          @click="openEditModal(previewItem); showPreviewModal = false;"
-        />
+        <div class="flex items-center justify-between w-full">
+          <div class="flex items-center gap-2">
+            <InputText
+              v-if="previewItem"
+              :value="previewItem.url"
+              readonly
+              class="w-64 text-sm"
+              @focus="$event.target.select()"
+            />
+            <Button
+              icon="pi pi-copy"
+              outlined
+              v-tooltip="'Copy URL'"
+              @click="copyUrl(previewItem?.url)"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <Button label="Close" outlined @click="showPreviewModal = false" />
+            <Button
+              v-if="previewItem && !previewItem.ai_analysis"
+              label="Analyze with AI"
+              icon="pi pi-sparkles"
+              outlined
+              @click="analyzePreview"
+            />
+            <Button
+              label="Edit"
+              icon="pi pi-pencil"
+              @click="openEditModal(previewItem); showPreviewModal = false;"
+            />
+          </div>
+        </div>
       </template>
     </Dialog>
 
@@ -564,6 +601,10 @@ const uploadOptions = ref({
   folder: '',
   aiAnalyze: true,
 });
+
+// Upload state
+const uploadingFiles = ref([]);
+const uploading = ref(false);
 
 // Options
 const typeOptions = [
@@ -744,15 +785,33 @@ const bulkDelete = async () => {
   }
 };
 
-const handleUpload = async () => {
-  // Implementation would go here
-  showUploadModal.value = false;
-  await mediaStore.fetchItems();
-  toast.add({ severity: 'success', summary: 'Success', detail: 'Files uploaded successfully', life: 3000 });
+const handleUpload = async (event) => {
+  if (!uploadingFiles.value.length) {
+    toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select files to upload', life: 3000 });
+    return;
+  }
+
+  uploading.value = true;
+  try {
+    const files = uploadingFiles.value.map(f => f.file || f);
+    await mediaStore.bulkUpload(files, {
+      collection: uploadOptions.value.collection || undefined,
+      aiAnalyze: uploadOptions.value.aiAnalyze,
+    });
+    showUploadModal.value = false;
+    uploadingFiles.value = [];
+    await mediaStore.fetchItems();
+    await mediaStore.fetchStorageUsage();
+    toast.add({ severity: 'success', summary: 'Success', detail: 'Files uploaded successfully', life: 3000 });
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Error', detail: error.message, life: 3000 });
+  } finally {
+    uploading.value = false;
+  }
 };
 
 const onFilesSelected = (event) => {
-  // Handle file selection
+  uploadingFiles.value = event.files;
 };
 
 const handleImport = async () => {
@@ -780,6 +839,23 @@ const analyzePreview = async () => {
     toast.add({ severity: 'success', summary: 'Success', detail: 'AI analysis started', life: 3000 });
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Error', detail: error.message, life: 3000 });
+  }
+};
+
+const copyUrl = async (url) => {
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.add({ severity: 'success', summary: 'Copied', detail: 'URL copied to clipboard', life: 2000 });
+  } catch (error) {
+    // Fallback for browsers that don't support clipboard API
+    const input = document.createElement('input');
+    input.value = url;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    toast.add({ severity: 'success', summary: 'Copied', detail: 'URL copied to clipboard', life: 2000 });
   }
 };
 

@@ -17,7 +17,7 @@ class MessageObserver
      */
     public function created(Message $message): void
     {
-        Log::info('MessageObserver: Message created', [
+        Log::channel('ai')->info('MessageObserver: Message created', [
             'message_id' => $message->id,
             'sender_type' => $message->sender_type,
             'is_from_customer' => $message->is_from_customer,
@@ -26,7 +26,7 @@ class MessageObserver
 
         // CRITICAL: Only process messages FROM CUSTOMERS, skip AI/agent messages
         if (in_array($message->sender_type, ['ai', 'agent', 'system'])) {
-            Log::info('MessageObserver: Skipping - message from AI/agent/system', [
+            Log::channel('ai')->info('MessageObserver: Skipping - message from AI/agent/system', [
                 'message_id' => $message->id,
                 'sender_type' => $message->sender_type,
             ]);
@@ -35,7 +35,7 @@ class MessageObserver
 
         // Double-check: must be from customer
         if ($message->sender_type !== 'customer' && !$message->is_from_customer) {
-            Log::info('MessageObserver: Skipping - not from customer', [
+            Log::channel('ai')->info('MessageObserver: Skipping - not from customer', [
                 'message_id' => $message->id,
                 'sender_type' => $message->sender_type,
                 'is_from_customer' => $message->is_from_customer,
@@ -51,7 +51,7 @@ class MessageObserver
 
         $conversation = $message->conversation;
 
-        Log::info('MessageObserver: Loading conversation', [
+        Log::channel('ai')->info('MessageObserver: Loading conversation', [
             'message_id' => $message->id,
             'conversation_id' => $conversation?->id,
             'is_ai_handling' => $conversation?->is_ai_handling,
@@ -61,7 +61,7 @@ class MessageObserver
 
         // Skip AI response for media messages - let media processing trigger response later
         if ($message->message_type !== 'text' || !empty($message->media_urls)) {
-            Log::info('MessageObserver: Skipping AI response - media message needs processing first', [
+            Log::channel('ai')->info('MessageObserver: Skipping AI response - media message needs processing first', [
                 'message_id' => $message->id,
                 'message_type' => $message->message_type,
                 'has_media' => !empty($message->media_urls),
@@ -71,7 +71,7 @@ class MessageObserver
 
         // Check if conversation should be handled by AI
         if (!$conversation || !$conversation->is_ai_handling) {
-            Log::info('Message received but AI handling disabled', [
+            Log::channel('ai')->info('Message received but AI handling disabled', [
                 'message_id' => $message->id,
                 'conversation_id' => $conversation?->id,
             ]);

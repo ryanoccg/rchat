@@ -239,6 +239,7 @@ class WorkflowStepExecutor
             'time_of_day' => $this->evaluateTimeOfDay($step->config),
             'day_of_week' => $this->evaluateDayOfWeek($step->config),
             'ai_condition' => $this->evaluateAICondition($context, $step->config),
+            'intent_value' => $this->evaluateIntentValue($context, $step->config),
             default => false,
         };
     }
@@ -371,20 +372,25 @@ class WorkflowStepExecutor
 
     /**
      * Evaluate AI-based condition.
+     * Supports both boolean return (default) and structured result (return_result=true).
+     *
+     * @return bool|array Returns boolean for normal conditions, array for structured output
      */
-    protected function evaluateAICondition(array $context, array $config): bool
+    protected function evaluateAICondition(array $context, array $config): bool|array
     {
-        $aiPrompt = $config['ai_prompt'] ?? null;
+        $aiPrompt = $config['ai_prompt'] ?? $config['prompt'] ?? null;
+        $returnResult = $config['return_result'] ?? false;
 
         if (!$aiPrompt) {
-            return false;
+            return $returnResult ? [] : false;
         }
 
         // Use AI to evaluate condition
         $conversation = $context['conversation'] ?? null;
+        $message = $context['message'] ?? null;
 
         if (!$conversation) {
-            return false;
+            return $returnResult ? [] : false;
         }
 
         // If conversation is an array (from serialized context), reload it from database
@@ -394,8 +400,13 @@ class WorkflowStepExecutor
                 $conversation = \App\Models\Conversation::find($conversationId);
             }
             if (!$conversation) {
-                return false;
+                return $returnResult ? [] : false;
             }
+        }
+
+        // Resolve message to model if needed
+        if ($message && is_array($message)) {
+            $message = \App\Models\Message::find($message['id'] ?? null);
         }
 
         try {
@@ -410,15 +421,129 @@ class WorkflowStepExecutor
                 $evaluationPrompt .= "{$msg->sender_type}: {$msg->content}\n";
             }
 
+            // If structured output is requested, parse JSON response
+            if ($returnResult) {
+                $evaluationPrompt .= "\nPlease respond with valid JSON only.";
+
+                $response = $aiService->respondToMessage($conversation, $evaluationPrompt);
+
+                $result = $this->parseJsonResponse($response->getContent());
+
+                // Store intent classification on message if present
+                if ($message && isset($result['intent'])) {
+                    $this->storeIntentOnMessage($message, $result);
+                }
+
+                return $result;
+            }
+
+            // Default behavior: boolean response
             $evaluationPrompt .= "\nPlease respond with only 'true' or 'false'.";
 
             $response = $aiService->respondToMessage($conversation, $evaluationPrompt);
 
             return strtolower(trim($response->getContent())) === 'true';
         } catch (\Exception $e) {
-            Log::error("AI condition evaluation failed: {$e->getMessage()}");
+            Log::channel('ai')->error("AI condition evaluation failed: {$e->getMessage()}", [
+                'conversation_id' => $conversation->id ?? null,
+                'config' => $config,
+            ]);
+            return $returnResult ? [] : false;
+        }
+    }
+
+    /**
+     * Evaluate intent value condition.
+     * Checks if the message's classified intent matches the expected intent.
+     */
+    protected function evaluateIntentValue(array $context, array $config): bool
+    {
+        $message = $context['message'] ?? null;
+        $expectedIntent = $config['intent'] ?? null;
+
+        if (!$message || !$expectedIntent) {
             return false;
         }
+
+        // Get intent from message (handle both object and array)
+        $intent = null;
+        if (is_object($message)) {
+            $intent = $message->intent ?? null;
+        } elseif (is_array($message)) {
+            $intent = $message['intent'] ?? null;
+            // If intent is not in array, try loading the message
+            if (!$intent && isset($message['id'])) {
+                $messageModel = \App\Models\Message::find($message['id']);
+                if ($messageModel) {
+                    $intent = $messageModel->intent;
+                }
+            }
+        }
+
+        // Check if intent matches
+        if (is_array($expectedIntent)) {
+            return in_array($intent, $expectedIntent);
+        }
+
+        return $intent === $expectedIntent;
+    }
+
+    /**
+     * Store intent classification result on message.
+     */
+    protected function storeIntentOnMessage(\App\Models\Message $message, array $result): void
+    {
+        try {
+            $confidence = $result['confidence'] ?? $result['confidence_score'] ?? null;
+
+            $message->update([
+                'intent' => $result['intent'] ?? null,
+                'intent_confidence' => is_numeric($confidence) ? (float) $confidence : null,
+                'intent_classified_at' => now(),
+            ]);
+
+            Log::channel('ai')->info('Intent stored on message', [
+                'message_id' => $message->id,
+                'intent' => $result['intent'] ?? null,
+                'confidence' => $confidence,
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('ai')->warning('Failed to store intent on message', [
+                'message_id' => $message->id ?? null,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Parse JSON response from AI, handling various formats.
+     */
+    protected function parseJsonResponse(string $content): array
+    {
+        // Try to extract JSON from content
+        $jsonMatch = null;
+        if (preg_match('/\{[^}]*\}/', $content, $jsonMatch)) {
+            $json = json_decode($jsonMatch[0], true);
+            if (is_array($json)) {
+                return $json;
+            }
+        }
+
+        // Try parsing entire content as JSON
+        $json = json_decode($content, true);
+        if (is_array($json)) {
+            return $json;
+        }
+
+        // Fallback: try to extract intent from text
+        $lowerContent = strtolower($content);
+        foreach (\App\Models\Message::allIntents() as $intent) {
+            if (str_contains($lowerContent, $intent)) {
+                return ['intent' => $intent, 'confidence' => 0.7];
+            }
+        }
+
+        return [];
     }
 
     /**

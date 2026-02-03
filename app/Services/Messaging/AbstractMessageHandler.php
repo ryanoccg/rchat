@@ -33,7 +33,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
 
     protected function processMessage(PlatformConnection $connection, array $messageData): array
     {
-        Log::info('Processing incoming message', [
+        Log::channel('ai')->info('Processing incoming message', [
             'connection_id' => $connection->id,
             'platform' => $connection->messagingPlatform->slug,
             'sender_id' => $messageData['sender_id'] ?? null,
@@ -52,7 +52,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
                 ->first();
             
             if ($existingMessage) {
-                Log::info('Duplicate message detected - skipping', [
+                Log::channel('ai')->info('Duplicate message detected - skipping', [
                     'platform_message_id' => $platformMessageId,
                     'existing_message_id' => $existingMessage->id,
                     'conversation_id' => $conversation->id,
@@ -67,7 +67,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
             }
         }
 
-        Log::info('Customer and conversation resolved', [
+        Log::channel('ai')->info('Customer and conversation resolved', [
             'customer_id' => $customer->id,
             'conversation_id' => $conversation->id,
             'conversation_status' => $conversation->status,
@@ -101,7 +101,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
 
         $conversation->update(['last_message_at' => now()]);
 
-        Log::info("Message received", [
+        Log::channel('ai')->info("Message received", [
             'connection_id' => $connection->id,
             'conversation_id' => $conversation->id,
             'message_id' => $message->id,
@@ -195,7 +195,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
             // Dispatch with no delay to store media as quickly as possible
             StoreMessageMedia::dispatch($message->id, $connection->id, $platform);
 
-            Log::info("Media storage job dispatched", [
+            Log::channel('ai')->info("Media storage job dispatched", [
                 'message_id' => $message->id,
                 'platform' => $platform,
             ]);
@@ -214,7 +214,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
             ProcessMediaMessage::dispatch($message, $connection, $platform)
                 ->delay(now()->addSeconds(5));
 
-            Log::info("Media processing job dispatched", [
+            Log::channel('ai')->info("Media processing job dispatched", [
                 'message_id' => $message->id,
                 'platform' => $platform,
                 'message_type' => $message->message_type,
@@ -281,7 +281,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
 
                     $customer->update($updateData);
 
-                    Log::info('Updated existing customer with profile', [
+                    Log::channel('ai')->info('Updated existing customer with profile', [
                         'customer_id' => $customer->id,
                         'name' => $senderProfile['name'] ?? $customer->name,
                         'has_profile_photo' => !empty($senderProfile['profile_pic']),
@@ -295,7 +295,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
             $senderProfile = null;
             if (method_exists($this, 'fetchUserProfile')) {
                 $senderProfile = $this->fetchUserProfile($connection, $platformUserId);
-                Log::info('Fetched user profile from platform', [
+                Log::channel('ai')->info('Fetched user profile from platform', [
                     'platform' => $connection->messagingPlatform->slug,
                     'user_id' => $platformUserId,
                     'profile' => $senderProfile,
@@ -313,9 +313,11 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
             
             // Create new customer if not found
             if (!$customer) {
+                // Use platform-specific fallback name based on the connection's messaging platform
+                $platformFallbackName = ($connection->messagingPlatform->name ?? 'Unknown') . ' User';
                 $customerName = $senderProfile['name'] ??
                                $messageData['sender_name'] ??
-                               'Facebook User';
+                               $platformFallbackName;
 
                 $customer = Customer::create([
                     'company_id' => $connection->company_id,
@@ -342,7 +344,7 @@ abstract class AbstractMessageHandler implements MessageHandlerInterface
                     }
                 }
 
-                Log::info('New customer created with profile', [
+                Log::channel('ai')->info('New customer created with profile', [
                     'customer_id' => $customer->id,
                     'name' => $customerName,
                     'has_profile' => !empty($senderProfile),

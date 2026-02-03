@@ -119,6 +119,19 @@ class MediaController extends Controller
                 'message' => 'File uploaded successfully',
                 'media' => new MediaResource($media),
             ], 201);
+        } catch (\InvalidArgumentException $e) {
+            // File size or validation error - return 413 if file too large
+            if (str_contains($e->getMessage(), 'size exceeds')) {
+                return response()->json([
+                    'message' => 'File size too large',
+                    'error' => $e->getMessage(),
+                ], 413);
+            }
+
+            return response()->json([
+                'message' => 'Invalid file',
+                'error' => $e->getMessage(),
+            ], 422);
         } catch (\Exception $e) {
             Log::error('Failed to upload media', [
                 'error' => $e->getMessage(),
@@ -128,7 +141,7 @@ class MediaController extends Controller
             return response()->json([
                 'message' => 'Failed to upload file',
                 'error' => $e->getMessage(),
-            ], 422);
+            ], 500);
         }
     }
 
@@ -161,10 +174,21 @@ class MediaController extends Controller
                     ]
                 );
                 $uploaded[] = new MediaResource($media);
+            } catch (\InvalidArgumentException $e) {
+                $errorMsg = str_contains($e->getMessage(), 'size exceeds')
+                    ? 'File size too large: ' . $e->getMessage()
+                    : $e->getMessage();
+
+                $failed[] = [
+                    'file' => $file->getClientOriginalName(),
+                    'error' => $errorMsg,
+                    'code' => str_contains($e->getMessage(), 'size exceeds') ? 413 : 422,
+                ];
             } catch (\Exception $e) {
                 $failed[] = [
                     'file' => $file->getClientOriginalName(),
                     'error' => $e->getMessage(),
+                    'code' => 500,
                 ];
             }
         }
@@ -207,6 +231,7 @@ class MediaController extends Controller
             if (!$media) {
                 return response()->json([
                     'message' => 'Failed to import file from URL',
+                    'error' => 'Unable to download or process the file from the provided URL',
                 ], 422);
             }
 
@@ -216,6 +241,18 @@ class MediaController extends Controller
                 'message' => 'File imported successfully',
                 'media' => new MediaResource($media),
             ], 201);
+        } catch (\InvalidArgumentException $e) {
+            if (str_contains($e->getMessage(), 'size exceeds')) {
+                return response()->json([
+                    'message' => 'File size too large',
+                    'error' => $e->getMessage(),
+                ], 413);
+            }
+
+            return response()->json([
+                'message' => 'Invalid file',
+                'error' => $e->getMessage(),
+            ], 422);
         } catch (\Exception $e) {
             Log::error('Failed to import media from URL', [
                 'url' => $validated['url'],
@@ -225,7 +262,7 @@ class MediaController extends Controller
             return response()->json([
                 'message' => 'Failed to import file',
                 'error' => $e->getMessage(),
-            ], 422);
+            ], 500);
         }
     }
 

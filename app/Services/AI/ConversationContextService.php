@@ -33,8 +33,8 @@ class ConversationContextService
             ->get();
         
         $totalMessages = $messages->count();
-        
-        Log::info('ConversationContext: Building optimized history', [
+
+        Log::channel('ai')->info('ConversationContext: Building optimized history', [
             'conversation_id' => $conversation->id,
             'total_messages' => $totalMessages,
         ]);
@@ -79,13 +79,13 @@ class ConversationContextService
             ];
         }
         
-        Log::info('ConversationContext: History optimized', [
+        Log::channel('ai')->info('ConversationContext: History optimized', [
             'conversation_id' => $conversation->id,
             'summary_included' => !empty($summary),
             'recent_messages' => count($recentMessages),
             'estimated_tokens' => $this->estimateTokens($history),
         ]);
-        
+
         return $history;
     }
     
@@ -194,16 +194,16 @@ class ConversationContextService
                         'is_ai_generated' => true,
                     ]
                 );
-                
-                Log::info('ConversationContext: AI summary generated', [
+
+                Log::channel('ai')->info('ConversationContext: AI summary generated', [
                     'conversation_id' => $conversation->id,
                     'summary_length' => strlen($summary),
                 ]);
-                
+
                 return $summary;
             }
         } catch (\Exception $e) {
-            Log::warning('ConversationContext: Failed to generate AI summary', [
+            Log::channel('ai')->warning('ConversationContext: Failed to generate AI summary', [
                 'error' => $e->getMessage(),
             ]);
         }
@@ -284,12 +284,12 @@ class ConversationContextService
         if (strlen($prompt) / 4 > $maxTokens) {
             $prompt = preg_replace('/### .*?\n.*?\n\n/s', '', $prompt);
         }
-        
-        Log::info('ConversationContext: System prompt optimized', [
+
+        Log::channel('ai')->info('ConversationContext: System prompt optimized', [
             'original_tokens' => $estimatedTokens,
             'optimized_tokens' => (int) ceil(strlen($prompt) / 4),
         ]);
-        
+
         return $prompt;
     }
     

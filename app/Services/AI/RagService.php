@@ -32,7 +32,7 @@ class RagService
         $queryEmbedding = $this->embedText($query);
 
         if (empty($queryEmbedding)) {
-            Log::warning('RAG: Failed to embed query, falling back to keyword search');
+            Log::channel('ai')->warning('RAG: Failed to embed query, falling back to keyword search');
             return $this->keywordSearch($company, $query, $topK, $knowledgeBaseIds);
         }
 
@@ -41,11 +41,11 @@ class RagService
 
         // If no embeddings found, fall back to full content
         if (empty($relevantChunks)) {
-            Log::info('RAG: No embeddings found, using full KB content');
+            Log::channel('ai')->info('RAG: No embeddings found, using full KB content');
             return $this->getFullKnowledgeBase($company, $knowledgeBaseIds);
         }
 
-        Log::info('RAG: Found relevant chunks', [
+        Log::channel('ai')->info('RAG: Found relevant chunks', [
             'query' => $query,
             'chunk_count' => count($relevantChunks),
             'kb_scoped' => $knowledgeBaseIds !== null,
@@ -60,7 +60,7 @@ class RagService
     public function embedText(string $text): array
     {
         if (empty($this->openAiApiKey)) {
-            Log::warning('RAG: OpenAI API key not configured');
+            Log::channel('ai')->warning('RAG: OpenAI API key not configured');
             return [];
         }
         
@@ -267,7 +267,7 @@ class RagService
             }
         }
         
-        Log::info('RAG: Knowledge base embedded', [
+        Log::channel('ai')->info('RAG: Knowledge base embedded', [
             'kb_id' => $knowledgeBase->id,
             'title' => $knowledgeBase->title,
             'chunks' => count($chunks),

@@ -111,7 +111,7 @@ class ProcessMediaMessage implements ShouldQueue
         if ($mediaText) {
             $metadata['media_text'] = $mediaText;
 
-            Log::info('Message updated with media context', [
+            Log::channel('ai')->info('Message updated with media context', [
                 'message_id' => $this->message->id,
                 'media_text_length' => strlen($mediaText),
             ]);
@@ -120,7 +120,7 @@ class ProcessMediaMessage implements ShouldQueue
             $metadata['media_text'] = '[Audio message could not be transcribed - please ask the customer to speak again or type their message]';
             $metadata['media_error'] = 'audio_transcription_failed';
 
-            Log::warning('Audio transcription failed, adding error context for AI', [
+            Log::channel('ai')->warning('Audio transcription failed, adding error context for AI', [
                 'message_id' => $this->message->id,
             ]);
         }
@@ -134,9 +134,8 @@ class ProcessMediaMessage implements ShouldQueue
     /**
      * Trigger AI response after media processing is complete
      *
-     * Phase 1.3: Changed to use WorkflowTriggerService::onMessageReceived()
-     * instead of scheduling ProcessDelayedAiResponse directly.
-     * This ensures audio/image messages go through workflow conditions (VIP detection, personality selection).
+     * Uses the delayed response mechanism to batch multiple messages together.
+     * Workflows are still evaluated via WorkflowTriggerService for proper routing.
      */
     protected function triggerAiResponse(): void
     {
@@ -151,7 +150,7 @@ class ProcessMediaMessage implements ShouldQueue
 
         // Check if conversation should be handled by AI
         if (!$conversation->is_ai_handling) {
-            Log::info('ProcessMediaMessage: Skipping AI response - AI handling disabled', [
+            Log::channel('ai')->info('ProcessMediaMessage: Skipping AI response - AI handling disabled', [
                 'message_id' => $this->message->id,
                 'conversation_id' => $conversation->id,
             ]);
@@ -162,22 +161,54 @@ class ProcessMediaMessage implements ShouldQueue
         $aiConfig = \App\Models\AiConfiguration::where('company_id', $conversation->company_id)->first();
 
         if (!$aiConfig || !$aiConfig->auto_respond) {
-            Log::info('ProcessMediaMessage: Skipping AI response - auto-respond disabled', [
+            Log::channel('ai')->info('ProcessMediaMessage: Skipping AI response - auto-respond disabled', [
                 'message_id' => $this->message->id,
                 'conversation_id' => $conversation->id,
             ]);
             return;
         }
 
-        // Use WorkflowTriggerService to go through workflow conditions
-        // This ensures VIP detection, personality selection, and other workflow rules apply to media messages
+        // Check for workflows that should handle this message
+        $company = $conversation->company;
         $workflowTriggerService = new \App\Services\Workflow\WorkflowTriggerService();
-        $workflowTriggerService->onMessageReceived($this->message);
 
-        Log::info('ProcessMediaMessage: Workflow trigger invoked after media processing', [
-            'message_id' => $this->message->id,
-            'conversation_id' => $conversation->id,
-        ]);
+        // Check for first message workflows
+        $hasFirstMessageWorkflow = \App\Models\Workflow::where('company_id', $company->id)
+            ->where('status', 'active')
+            ->where('trigger_type', 'first_message')
+            ->whereJsonContains('trigger_config->trigger_on_media', true)
+            ->exists();
+
+        // Check for message_received workflows
+        $hasMessageReceivedWorkflow = \App\Models\Workflow::where('company_id', $company->id)
+            ->where('status', 'active')
+            ->where('trigger_type', 'message_received')
+            ->whereJsonContains('trigger_config->trigger_on_media', true)
+            ->exists();
+
+        // If there are workflows configured for media messages, trigger them
+        // They will schedule delayed AI response via their send_ai_response action
+        if ($hasFirstMessageWorkflow || $hasMessageReceivedWorkflow) {
+            Log::channel('ai')->info('ProcessMediaMessage: Triggering workflow for media message', [
+                'message_id' => $this->message->id,
+                'conversation_id' => $conversation->id,
+                'has_first_message_workflow' => $hasFirstMessageWorkflow,
+                'has_message_received_workflow' => $hasMessageReceivedWorkflow,
+            ]);
+
+            $workflowTriggerService->onMessageReceived($this->message);
+        } else {
+            // No workflows configured for media - use fallback delayed AI response
+            Log::channel('ai')->info('ProcessMediaMessage: Scheduling fallback delayed AI response for media message', [
+                'message_id' => $this->message->id,
+                'conversation_id' => $conversation->id,
+            ]);
+
+            \App\Jobs\ProcessDelayedAiResponse::scheduleForConversation(
+                $conversation->id,
+                $this->message->id
+            );
+        }
     }
 
     /**

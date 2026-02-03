@@ -435,4 +435,126 @@ class AnalyticsController extends Controller
 
         return round((($current - $previous) / $previous) * 100, 1);
     }
+
+    /**
+     * Get intent distribution analytics
+     */
+    public function intentDistribution(Request $request)
+    {
+        $companyId = $request->company_id;
+        $period = $request->get('period', '30'); // days
+        $startDate = Carbon::now()->subDays((int) $period)->startOfDay();
+
+        // Overall intent distribution
+        $distribution = Message::whereHas('conversation', function ($q) use ($companyId) {
+            $q->where('company_id', $companyId);
+        })
+            ->where('created_at', '>=', $startDate)
+            ->where('is_from_customer', true)
+            ->whereNotNull('intent')
+            ->select('intent', DB::raw('count(*) as count'))
+            ->groupBy('intent')
+            ->orderByDesc('count')
+            ->get();
+
+        // Map intent to human-readable labels
+        $intentLabels = [
+            'general_inquiry' => 'General Inquiry',
+            'ask_for_service' => 'Ask for Service',
+            'customer_service' => 'Customer Service',
+            'company_information' => 'Company Information',
+            'product_inquiry' => 'Product Inquiry',
+        ];
+
+        $distribution = $distribution->map(function ($item) use ($intentLabels) {
+            $item->label = $intentLabels[$item->intent] ?? ucfirst(str_replace('_', ' ', $item->intent));
+            return $item;
+        });
+
+        // Intent over time (daily breakdown)
+        $intentOverTime = Message::whereHas('conversation', function ($q) use ($companyId) {
+            $q->where('company_id', $companyId);
+        })
+            ->where('created_at', '>=', $startDate)
+            ->where('is_from_customer', true)
+            ->whereNotNull('intent')
+            ->select(
+                DB::raw("DATE_FORMAT(created_at, '%Y-%m-%d') as date"),
+                'intent',
+                DB::raw('count(*) as count')
+            )
+            ->groupBy('date', 'intent')
+            ->orderBy('date')
+            ->get()
+            ->groupBy('date');
+
+        // Average confidence by intent
+        $confidenceByIntent = Message::whereHas('conversation', function ($q) use ($companyId) {
+            $q->where('company_id', $companyId);
+        })
+            ->where('created_at', '>=', $startDate)
+            ->where('is_from_customer', true)
+            ->whereNotNull('intent')
+            ->select('intent', DB::raw('avg(intent_confidence) as avg_confidence'), DB::raw('count(*) as count'))
+            ->groupBy('intent')
+            ->get()
+            ->keyBy('intent');
+
+        return response()->json([
+            'data' => [
+                'distribution' => $distribution,
+                'over_time' => $intentOverTime,
+                'confidence_by_intent' => $confidenceByIntent,
+            ],
+            'period' => $period,
+        ]);
+    }
+
+    /**
+     * Get intent-related conversation metrics
+     */
+    public function intentMetrics(Request $request)
+    {
+        $companyId = $request->company_id;
+        $period = $request->get('period', '30');
+        $startDate = Carbon::now()->subDays((int) $period)->startOfDay();
+
+        // Resolution rate by intent
+        $resolutionByIntent = DB::table('messages')
+            ->join('conversations', 'messages.conversation_id', '=', 'conversations.id')
+            ->where('conversations.company_id', $companyId)
+            ->where('messages.created_at', '>=', $startDate)
+            ->where('messages.is_from_customer', true)
+            ->whereNotNull('messages.intent')
+            ->select(
+                'messages.intent',
+                DB::raw('count(distinct conversations.id) as total'),
+                DB::raw("SUM(CASE WHEN conversations.status = 'closed' THEN 1 ELSE 0 END) as resolved")
+            )
+            ->groupBy('messages.intent')
+            ->get();
+
+        // AI handling rate by intent
+        $aiHandlingByIntent = DB::table('messages')
+            ->join('conversations', 'messages.conversation_id', '=', 'conversations.id')
+            ->where('conversations.company_id', $companyId)
+            ->where('messages.created_at', '>=', $startDate)
+            ->where('messages.is_from_customer', true)
+            ->whereNotNull('messages.intent')
+            ->select(
+                'messages.intent',
+                DB::raw('count(distinct conversations.id) as total'),
+                DB::raw("SUM(CASE WHEN conversations.is_ai_handling = 1 THEN 1 ELSE 0 END) as ai_handled")
+            )
+            ->groupBy('messages.intent')
+            ->get();
+
+        return response()->json([
+            'data' => [
+                'resolution_by_intent' => $resolutionByIntent,
+                'ai_handling_by_intent' => $aiHandlingByIntent,
+            ],
+            'period' => $period,
+        ]);
+    }
 }

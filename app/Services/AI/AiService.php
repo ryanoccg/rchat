@@ -63,7 +63,7 @@ class AiService
             ->first();
 
         if (!$agent) {
-            Log::warning('AiService::setAgentById - Agent not found or inactive', [
+            Log::channel('ai')->warning('AiService::setAgentById - Agent not found or inactive', [
                 'agent_id' => $agentId,
                 'company_id' => $this->company->id,
             ]);
@@ -73,7 +73,7 @@ class AiService
         $this->agentConfig = $agent->toConfigurationArray();
         $this->agentType = $agent->agent_type;
 
-        Log::info('AiService::setAgentById - Agent loaded', [
+        Log::channel('ai')->info('AiService::setAgentById - Agent loaded', [
             'agent_id' => $agentId,
             'agent_name' => $agent->name,
             'agent_type' => $this->agentType,
@@ -114,7 +114,7 @@ class AiService
         if (!empty($options['ai_agent_id'])) {
             $agentLoaded = $this->setAgentById($options['ai_agent_id']);
             if (!$agentLoaded) {
-                Log::warning('AiService: Specified agent not found, using company defaults', [
+                Log::channel('ai')->warning('AiService:Specified agent not found, using company defaults', [
                     'ai_agent_id' => $options['ai_agent_id'],
                     'company_id' => $this->company->id,
                 ]);
@@ -159,6 +159,11 @@ class AiService
             $activeConfig['rag_top_k'] = $options['rag_top_k'];
         }
 
+        // Store workflow options for later use
+        $workflowSystemPrompt = $options['system_prompt'] ?? null;
+        $workflowPromptTemplate = $options['prompt_template'] ?? null;
+        $workflowAdditionalContext = $options['additional_context'] ?? null;
+
         // Build context from conversation history and knowledge base using RAG
         $context = $this->buildContext($conversation, $customerMessage);
 
@@ -166,7 +171,7 @@ class AiService
         $imageContext = $this->getRecentImageContext($conversation);
         if ($imageContext) {
             $context['image'] = $imageContext;
-            Log::info('AiService: Image context added for vision', [
+            Log::channel('ai')->info('AiService:Image context added for vision', [
                 'conversation_id' => $conversation->id,
                 'image_count' => count($imageContext),
             ]);
@@ -203,7 +208,7 @@ class AiService
         });
         $relevantContext = array_values($relevantContext); // Re-index array
 
-        Log::info('AiService: RAG context retrieved', [
+        Log::channel('ai')->info('AiService:RAG context retrieved', [
             'company_id' => $this->company->id,
             'conversation_id' => $conversation->id,
             'query' => $searchQuery,
@@ -249,7 +254,7 @@ class AiService
             // Search products (limit to 5 to provide good options)
             $relevantProducts = $productRagService->searchProducts($this->company, $productSearchQuery, $filters, 5);
 
-            Log::info('AiService: Product RAG results', [
+            Log::channel('ai')->info('AiService:Product RAG results', [
                 'company_id' => $this->company->id,
                 'query' => $productSearchQuery,
                 'filters' => $filters,
@@ -258,7 +263,7 @@ class AiService
             ]);
         } else {
             $skipReason = !$enableProductSearch ? 'disabled_by_personality' : $productSearchResult['reason'];
-            Log::info('AiService: Product search skipped', [
+            Log::channel('ai')->info('AiService:Product search skipped', [
                 'company_id' => $this->company->id,
                 'reason' => $skipReason,
                 'message' => substr($customerMessage, 0, 100),
@@ -267,7 +272,7 @@ class AiService
 
         // Build system prompt with RAG context and products
         // Use agent's system prompt if available, otherwise use default
-        $systemPrompt = $this->buildSystemPromptWithRag($conversation->customer, $relevantContext, $relevantProducts, $activeConfig);
+        $systemPrompt = $this->buildSystemPromptWithRag($conversation->customer, $relevantContext, $relevantProducts, $activeConfig, $workflowSystemPrompt);
 
         // Store relevant products in AiResponse for later use
         // (This is needed for fallback image sending in ProcessDelayedAiResponse)
@@ -279,7 +284,7 @@ class AiService
 
         $context['system'] = $systemPrompt;
 
-        Log::info('AiService: System prompt built', [
+        Log::channel('ai')->info('AiService:System prompt built', [
             'prompt_length' => strlen($systemPrompt),
             'full_prompt' => $systemPrompt,
             'customer_message' => $customerMessage,
@@ -294,7 +299,7 @@ class AiService
         if (empty($mediaContext)) {
             $cachedResponse = AiResponseCache::get($this->company->id, $customerMessage, $knowledgeIds, $conversation->id);
             if ($cachedResponse) {
-                Log::info('Using cached AI response', [
+                Log::channel('ai')->info('Using cached AI response', [
                     'company_id' => $this->company->id,
                     'conversation_id' => $conversation->id,
                 ]);
@@ -309,7 +314,7 @@ class AiService
         );
 
         // Try primary provider - use vision API if images are present
-        Log::info('AiService: Sending to AI provider', [
+        Log::channel('ai')->info('AiService:Sending to AI provider', [
             'agent_type' => $this->agentType ?? 'legacy',
             'model' => $activeConfig['primary_model'],
             'max_tokens' => $activeConfig['max_tokens'],
@@ -321,13 +326,17 @@ class AiService
 
         // Use vision API if images are in context
         if (!empty($imageContext) && method_exists($provider, 'sendMessageWithVision')) {
-            $response = $provider->sendMessageWithVision($customerMessage, $context, [
+            // Append workflow template/additional context if provided
+            $messageToSend = $this->appendWorkflowContext($customerMessage, $workflowPromptTemplate, $workflowAdditionalContext);
+            $response = $provider->sendMessageWithVision($messageToSend, $context, [
                 'model' => $activeConfig['primary_model'],
                 'max_tokens' => $activeConfig['max_tokens'],
                 'temperature' => $activeConfig['temperature'],
             ]);
         } else {
-            $response = $provider->sendMessage($customerMessage, $context, [
+            // Append workflow template/additional context if provided
+            $messageToSend = $this->appendWorkflowContext($customerMessage, $workflowPromptTemplate, $workflowAdditionalContext);
+            $response = $provider->sendMessage($messageToSend, $context, [
                 'model' => $activeConfig['primary_model'],
                 'max_tokens' => $activeConfig['max_tokens'],
                 'temperature' => $activeConfig['temperature'],
@@ -335,7 +344,7 @@ class AiService
         }
 
         // Log AI response for debugging
-        Log::info('AiService: AI Response received', [
+        Log::channel('ai')->info('AiService:AI Response received', [
             'success' => $response->isSuccessful(),
             'ai_reply' => $response->isSuccessful() ? $response->getContent() : null,
             'error' => $response->isSuccessful() ? null : $response->getError(),
@@ -345,14 +354,16 @@ class AiService
 
         // If failed and fallback is configured, try fallback
         if (!$response->isSuccessful() && $this->config && $this->config->fallback_provider_id) {
-            Log::warning("Primary AI provider failed, trying fallback", [
+            Log::channel('ai')->warning("Primary AI provider failed, trying fallback", [
                 'company_id' => $this->company->id,
                 'error' => $response->getError(),
             ]);
 
             $fallbackProvider = AiServiceFactory::makeFallback($this->config);
             if ($fallbackProvider) {
-                $response = $fallbackProvider->sendMessage($customerMessage, $context);
+                // Append workflow template/additional context if provided
+                $messageToSend = $this->appendWorkflowContext($customerMessage, $workflowPromptTemplate, $workflowAdditionalContext);
+                $response = $fallbackProvider->sendMessage($messageToSend, $context);
             }
         }
 
@@ -414,14 +425,14 @@ class AiService
             $customer = $conversation->customer;
             if ($customer && $customer->language !== $languageCode) {
                 $customer->update(['language' => $languageCode]);
-                Log::info('Customer language updated from audio detection', [
+                Log::channel('ai')->info('Customer language updated from audio detection', [
                     'customer_id' => $customer->id,
                     'old_language' => $customer->language,
                     'new_language' => $languageCode,
                 ]);
             }
         } catch (\Exception $e) {
-            Log::warning('Failed to update customer language', [
+            Log::channel('ai')->warning('Failed to update customer language', [
                 'error' => $e->getMessage(),
             ]);
         }
@@ -485,6 +496,27 @@ class AiService
         }
 
         return $instructions;
+    }
+
+    /**
+     * Append workflow context (prompt template and additional context) to customer message
+     * This allows workflows to add custom instructions to the AI prompt
+     */
+    protected function appendWorkflowContext(string $customerMessage, ?string $promptTemplate, ?string $additionalContext): string
+    {
+        $messageToSend = $customerMessage;
+
+        // Append prompt template if provided
+        if (!empty($promptTemplate)) {
+            $messageToSend .= "\n\n" . trim($promptTemplate);
+        }
+
+        // Append additional context if provided
+        if (!empty($additionalContext)) {
+            $messageToSend .= "\n\n" . trim($additionalContext);
+        }
+
+        return $messageToSend;
     }
 
     /**
@@ -553,7 +585,7 @@ class AiService
     /**
      * Build comprehensive system prompt with RAG context (used by all platforms)
      */
-    protected function buildSystemPromptWithRag($customer, array $ragContext, array $products = [], ?array $activeConfig = null): string
+    protected function buildSystemPromptWithRag($customer, array $ragContext, array $products = [], ?array $activeConfig = null, ?string $workflowSystemPrompt = null): string
     {
         $company = $this->company;
         $aiConfig = $activeConfig ?? ($this->config ? [
@@ -563,8 +595,14 @@ class AiService
             'custom_instructions' => $this->config->custom_instructions ?? [],
         ] : null);
 
-        // Base system identity - Be warm and personable
-        $prompt = "You are {$company->name}'s friendly customer service representative. You chat naturally like a real person would - warm, helpful, and conversational.\n\n";
+        // Use workflow system prompt if provided, otherwise use base identity
+        if ($workflowSystemPrompt) {
+            // Workflow provides complete custom system prompt
+            $prompt = trim($workflowSystemPrompt) . "\n\n";
+        } else {
+            // Base system identity - Be warm and personable
+            $prompt = "You are {$company->name}'s friendly customer service representative. You chat naturally like a real person would. short and clear.\n\n";
+        }
 
         // Core capabilities - Focus on being human-like
         $prompt .= "# HOW TO COMMUNICATE (VERY IMPORTANT)\n";
@@ -582,7 +620,7 @@ class AiService
         $prompt .= "- Generic endings: 'Is there anything else I can help you with?'\n";
         $prompt .= "- Unnecessary filler: 'Certainly!', 'Absolutely!', 'Of course!'\n";
         $prompt .= "- not confirm ending like: 'If you... need help, more information, any questions?`'\n";
-        $prompt .= "- keep using the same emoji repeatedly\n";
+        $prompt .= "- Unnecessary emoji\n";
         $prompt .= "- Long explanations when a quick answer works\n\n";
 
         // Human routing rules
@@ -691,9 +729,10 @@ class AiService
             $prompt .= "- Format product recommendations clearly: name, price, and a short description\n\n";
 
             if (!empty($productsWithImages)) {
-                $prompt .= "# PRODUCT IMAGES - MANDATORY WHEN RECOMMENDING\n";
-                $prompt .= "When you recommend a product that has an Image URL, you MUST include the image.\n";
-                $prompt .= "Format: Place the image tag on its own line AFTER mentioning the product:\n";
+                $prompt .= "# PRODUCT IMAGES - YOU CAN SEND IMAGES!\n";
+                $prompt .= "IMPORTANT: You HAVE the ability to send product images. Do NOT say 'I can't send images' or 'I can't display images'.\n";
+                $prompt .= "Your responses are processed by a system that extracts image tags and sends them as native platform attachments.\n\n";
+                $prompt .= "When you recommend a product that has an Image URL, you MUST include the image using this format:\n";
                 $prompt .= "[PRODUCT_IMAGE: paste_the_exact_image_url_from_above]\n\n";
                 $prompt .= "Example:\n";
                 $prompt .= "Customer: 'What toys do you have?'\n";
@@ -701,12 +740,17 @@ class AiService
                 $prompt .= "[PRODUCT_IMAGE: https://example.com/storage/media/1/products/teddy.jpg]\n";
                 $prompt .= "Also the Robot Car - RM 49, great for ages 5+!\n";
                 $prompt .= "[PRODUCT_IMAGE: https://example.com/storage/media/1/products/car.jpg]'\n\n";
+                $prompt .= "When to include images:\n";
+                $prompt .= "- When recommending ANY product that has an Image URL\n";
+                $prompt .= "- When customer asks 'show me', 'what does it look like', 'can I see', 'picture of', etc.\n";
+                $prompt .= "- When discussing visual product features like color, design, appearance\n";
+                $prompt .= "- Even if the customer doesn't explicitly ask, show the image when mentioning a product!\n\n";
                 $prompt .= "Rules:\n";
                 $prompt .= "- ONLY use exact Image URLs from the product list above, never make up URLs\n";
                 $prompt .= "- Maximum 3 images per response\n";
-                $prompt .= "- Always include image when customer asks 'show me', 'what does it look like', 'can you show', etc.\n";
-                $prompt .= "- NEVER paste raw URLs in your text response. ONLY use the [PRODUCT_IMAGE: url] tag format for images\n";
-                $prompt .= "- The image will be sent as a native attachment on the customer's platform, so do NOT include any URL in your text\n\n";
+                $prompt .= "- NEVER say 'I cannot send images' or 'I cannot display images' - you CAN!\n";
+                $prompt .= "- NEVER paste raw URLs in your text response. ONLY use the [PRODUCT_IMAGE: url] tag format\n";
+                $prompt .= "- The image will be sent as a native attachment, so do NOT include any URL in your text\n\n";
             }
         }
 
@@ -826,6 +870,49 @@ class AiService
     }
 
     /**
+     * Get AI settings optimized for a specific intent.
+     * This allows workflows to adjust RAG, product search, and prompts based on classified intent.
+     *
+     * @param string|null $intent The classified intent (general_inquiry, ask_for_service, etc.)
+     * @return array{rag_top_k: int, enable_product_search: bool, prompt_addition: string}
+     */
+    public function getIntentOptimizedSettings(?string $intent): array
+    {
+        return match ($intent) {
+            Message::INTENT_GENERAL_INQUIRY => [
+                'rag_top_k' => 1,
+                'enable_product_search' => false,
+                'prompt_addition' => '',
+            ],
+            Message::INTENT_ASK_FOR_SERVICE => [
+                'rag_top_k' => 3,
+                'enable_product_search' => false,
+                'prompt_addition' => 'Service booking mode. Help customers schedule appointments or book services.',
+            ],
+            Message::INTENT_CUSTOMER_SERVICE => [
+                'rag_top_k' => 4,
+                'enable_product_search' => false,
+                'prompt_addition' => 'Support mode. Show empathy for their issue. Try to resolve, or route to human if complex.',
+            ],
+            Message::INTENT_COMPANY_INFORMATION => [
+                'rag_top_k' => 5,
+                'enable_product_search' => false,
+                'prompt_addition' => 'Company information mode. Use knowledge base for accurate hours, location, policies.',
+            ],
+            Message::INTENT_PRODUCT_INQUIRY => [
+                'rag_top_k' => 2,
+                'enable_product_search' => true,
+                'prompt_addition' => 'Sales mode. Recommend 2-3 relevant products with prices.',
+            ],
+            default => [
+                'rag_top_k' => 2,
+                'enable_product_search' => null, // use default behavior
+                'prompt_addition' => '',
+            ],
+        };
+    }
+
+    /**
      * Get recent image messages from the conversation for vision AI
      */
     protected function getRecentImageContext(Conversation $conversation): ?array
@@ -856,7 +943,7 @@ class AiService
                                 'mime_type' => $imageData['mime_type'],
                                 'detail' => 'auto',
                             ];
-                            Log::info('AiService: Downloaded image for vision', [
+                            Log::channel('ai')->info('AiService:Downloaded image for vision', [
                                 'url' => substr($media['url'], 0, 100) . '...',
                                 'mime_type' => $imageData['mime_type'],
                                 'size' => strlen($imageData['base64']),
@@ -888,7 +975,7 @@ class AiService
                 ];
             }
 
-            Log::warning('AiService: Failed to download image', [
+            Log::channel('ai')->warning('AiService:Failed to download image', [
                 'url' => substr($url, 0, 100) . '...',
                 'status' => $response->status(),
             ]);
@@ -941,7 +1028,7 @@ class AiService
             $prompt .= "**Current Availability:**\n";
             $prompt .= $availableDatesText . "\n\n";
         } catch (\Exception $e) {
-            Log::warning('AiService: Could not fetch appointment availability', [
+            Log::channel('ai')->warning('AiService:Could not fetch appointment availability', [
                 'company_id' => $this->company->id,
                 'error' => $e->getMessage(),
             ]);

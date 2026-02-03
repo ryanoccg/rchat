@@ -28,9 +28,11 @@ use App\Http\Controllers\Api\MediaController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Public routes
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+// Public routes with rate limiting for security
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
+});
 
 // Two-factor authentication verification (during login, no auth required)
 Route::post('/two-factor/verify', [SettingsController::class, 'verifyTwoFactor']);
@@ -180,6 +182,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/analytics/usage', [AnalyticsController::class, 'usage']);
         Route::get('/analytics/hourly-distribution', [AnalyticsController::class, 'hourlyDistribution']);
         Route::get('/analytics/export', [AnalyticsController::class, 'export']);
+        Route::get('/analytics/intent-distribution', [AnalyticsController::class, 'intentDistribution']);
+        Route::get('/analytics/intent-metrics', [AnalyticsController::class, 'intentMetrics']);
 
         // Subscriptions & Billing
         Route::get('/subscriptions/plans', [SubscriptionController::class, 'plans']);

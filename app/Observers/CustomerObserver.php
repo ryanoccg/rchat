@@ -13,7 +13,7 @@ class CustomerObserver
      */
     public function created(Customer $customer): void
     {
-        Log::info('Customer created', [
+        Log::channel('ai')->info('Customer created', [
             'customer_id' => $customer->id,
             'company_id' => $customer->company_id,
             'name' => $customer->name,

@@ -50,7 +50,7 @@ class AiResponseCache
         $cached = Cache::get($key);
 
         if ($cached) {
-            \Log::info('AI Response Cache HIT', ['key' => $key]);
+            \Log::channel('ai')->info('AI Response Cache HIT', ['key' => $key]);
             return AiResponse::success(
                 content: $cached['content'],
                 model: $cached['model'] . ' (cached)',
@@ -85,7 +85,7 @@ class AiResponseCache
             'cached_at' => now()->toISOString(),
         ], $ttl ?? self::CACHE_TTL);
 
-        \Log::info('AI Response cached', ['key' => $key]);
+        \Log::channel('ai')->info('AI Response cached', ['key' => $key]);
     }
 
     /**
@@ -100,7 +100,7 @@ class AiResponseCache
         
         foreach ($patterns as $pattern => $response) {
             if (str_contains($normalized, $pattern)) {
-                \Log::info('FAQ pattern matched', ['pattern' => $pattern]);
+                \Log::channel('ai')->info('FAQ pattern matched', ['pattern' => $pattern]);
                 return $response;
             }
         }
@@ -115,6 +115,6 @@ class AiResponseCache
     {
         // In production, use tagged caching or pattern deletion
         Cache::forget("company:{$companyId}:faq_patterns");
-        \Log::info('Company AI cache cleared', ['company_id' => $companyId]);
+        \Log::channel('ai')->info('Company AI cache cleared', ['company_id' => $companyId]);
     }
 }

@@ -40,7 +40,7 @@ class AiAgentFactory extends Factory
             'description' => fake()->optional()->sentence(),
             'ai_provider_id' => $aiProvider?->id ?? 1,
             'system_prompt' => fake()->paragraph(),
-            'model' => 'gpt-5-mini',
+            'model' => 'gpt-4o-mini',
             'temperature' => fake()->randomFloat(2, 0, 1),
             'max_tokens' => fake()->numberBetween(100, 4096),
             'confidence_threshold' => fake()->numberBetween(30, 90),

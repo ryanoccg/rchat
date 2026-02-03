@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('agent_type'); // new_customer, returning_customer, follow_up, general, custom
             $table->text('description')->nullable();
             $table->unsignedBigInteger('ai_provider_id');
-            $table->string('model')->default('gpt-5-mini');
+            $table->string('model')->default('gpt-4o-mini');
             $table->text('system_prompt')->nullable();
             $table->text('personality_tone')->nullable();
             $table->json('prohibited_topics')->nullable();

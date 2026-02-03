@@ -16,7 +16,7 @@ class AiProviderSeeder extends Seeder
             'description' => 'GPT models from OpenAI including GPT-4o and GPT-4',
             'available_models' => [
                 'gpt-4o',
-                'gpt-5-mini',
+                'gpt-4o-mini',
                 'gpt-4-turbo',
                 'gpt-4',
                 'gpt-3.5-turbo',

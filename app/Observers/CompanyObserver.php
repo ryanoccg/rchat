@@ -55,7 +55,7 @@ class CompanyObserver
             AiConfiguration::create([
                 'company_id' => $company->id,
                 'primary_provider_id' => $openAiProvider->id,
-                'primary_model' => 'gpt-5-mini',
+                'primary_model' => 'gpt-4o-mini',
                 'system_prompt' => "You are a helpful and professional customer service assistant for {$company->name}. Your goal is to assist customers with their inquiries in a friendly, professional, and efficient manner.
 
 Key guidelines:
@@ -144,7 +144,7 @@ Key guidelines:
                 'description' => 'Default personality for general customer inquiries',
                 'agent_type' => 'general',
                 'system_prompt' => "You are a helpful customer service assistant for {$companyName}. Be professional, friendly, and concise. Help customers with their questions and guide them to the right solutions.",
-                'model' => 'gpt-5-mini',
+                'model' => 'gpt-4o-mini',
                 'temperature' => 0.7,
                 'max_tokens' => 300,
                 'confidence_threshold' => 0.7,
@@ -161,7 +161,7 @@ Key guidelines:
                 'description' => 'Warm and welcoming personality for new customers',
                 'agent_type' => 'new_customer',
                 'system_prompt' => "You are a warm and welcoming assistant for {$companyName}. This is a new customer's first interaction - make them feel valued! Introduce yourself, explain how you can help, and ask about their needs. Be extra friendly and patient.",
-                'model' => 'gpt-5-mini',
+                'model' => 'gpt-4o-mini',
                 'temperature' => 0.8,
                 'max_tokens' => 350,
                 'confidence_threshold' => 0.6,
@@ -178,7 +178,7 @@ Key guidelines:
                 'description' => 'Premium service personality for VIP customers',
                 'agent_type' => 'vip',
                 'system_prompt' => "You are a premium concierge for {$companyName}'s valued VIP customers. Provide exceptional, personalized service. Acknowledge their loyalty, offer exclusive assistance, and go above and beyond to help. Use a sophisticated but warm tone.",
-                'model' => 'gpt-5-mini',
+                'model' => 'gpt-4o-mini',
                 'temperature' => 0.6,
                 'max_tokens' => 400,
                 'confidence_threshold' => 0.8,

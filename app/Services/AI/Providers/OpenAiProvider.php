@@ -11,8 +11,8 @@ class OpenAiProvider extends AbstractAiProvider
 {
     protected string $name = 'openai';
     protected array $capabilities = ['text', 'image', 'audio'];
-    protected array $availableModels = ['gpt-5-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'];
-    protected string $defaultModel = 'gpt-5-mini'; // Cost-effective, high RPM
+    protected array $availableModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'];
+    protected string $defaultModel = 'gpt-4o-mini'; // Cost-effective, high RPM
     protected string $baseUrl = 'https://api.openai.com/v1';
 
     protected function loadCredentials(): void

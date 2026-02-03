@@ -54,12 +54,12 @@
                                 </div>
                                 <div>
                                     <span class="font-medium text-surface-900 dark:text-surface-100">OpenAI ChatGPT</span>
-                                    <p class="text-xs text-surface-500">gpt-5-mini</p>
+                                    <p class="text-xs text-surface-500">gpt-4o-mini</p>
                                 </div>
                                 <Tag value="Default" severity="success" class="ml-auto" />
                             </div>
                             <p class="text-xs text-surface-400 mt-1">
-                                AI provider is fixed to OpenAI ChatGPT (gpt-5-mini) for reliable performance
+                                AI provider is fixed to OpenAI ChatGPT (gpt-4o-mini) for reliable performance
                             </p>
                         </div>
 
@@ -305,7 +305,7 @@ const testResult = ref(null)
 const form = ref({
     primary_provider_id: null,
     fallback_provider_id: null,
-    primary_model: 'gpt-5-mini',
+    primary_model: 'gpt-4o-mini',
     system_prompt: '',
     personality_tone: 'professional',
     prohibited_topics: [],
@@ -352,7 +352,7 @@ const loadConfiguration = async () => {
         form.value = {
             primary_provider_id: openaiProvider?.id || config.primary_provider_id,
             fallback_provider_id: null,
-            primary_model: 'gpt-5-mini',
+            primary_model: 'gpt-4o-mini',
             system_prompt: config.system_prompt || '',
             personality_tone: config.personality_tone || 'professional',
             prohibited_topics: config.prohibited_topics || [],
@@ -373,7 +373,7 @@ const saveConfiguration = async () => {
     const openaiProvider = providers.value.find(p => p.slug === 'openai')
     if (openaiProvider) {
         form.value.primary_provider_id = openaiProvider.id
-        form.value.primary_model = 'gpt-5-mini'
+        form.value.primary_model = 'gpt-4o-mini'
     }
 
     if (!form.value.primary_provider_id) {

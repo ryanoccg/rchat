@@ -112,7 +112,7 @@ class AiAgentController extends Controller
             'agent_type' => $validated['agent_type'],
             'description' => $validated['description'] ?? null,
             'ai_provider_id' => $aiProviderId,
-            'model' => $validated['model'] ?? 'gpt-5-mini',
+            'model' => $validated['model'] ?? 'gpt-4o-mini',
             'system_prompt' => $validated['system_prompt'] ?? null,
             'personality_tone' => $validated['personality_tone'] ?? null,
             'prohibited_topics' => $validated['prohibited_topics'] ?? [],

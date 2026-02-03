@@ -59,7 +59,7 @@ class AiAgentTest extends TestCase
             'agent_type' => 'general',
             'system_prompt' => 'You are a helpful assistant',
             'ai_provider_id' => $this->aiProvider->id,
-            'model' => 'gpt-4o-mini',
+            'model' => 'gpt-5-mini',
             'temperature' => 0.7,
             'max_tokens' => 300,
             'trigger_conditions' => [
@@ -251,7 +251,7 @@ class AiAgentTest extends TestCase
             'name' => 'Test Agent',
             'agent_type' => 'general',
             'ai_provider_id' => $this->aiProvider->id,
-            'model' => 'gpt-4o-mini',
+            'model' => 'gpt-5-mini',
             'max_tokens' => 5000,
         ]);
 

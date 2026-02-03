@@ -488,7 +488,7 @@ class WebChatController extends Controller
             $provider = new \App\Services\AI\Providers\OpenAiProvider(null);
             
             $response = $provider->sendMessage('Hello, this is a test message.', [], [
-                'model' => 'gpt-4o-mini',
+                'model' => 'gpt-5-mini',
                 'max_tokens' => 50,
                 'temperature' => 0.5,
             ]);

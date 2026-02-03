@@ -52,6 +52,7 @@ class WorkflowActionService
 
     /**
      * Send a message.
+     * Supports [PRODUCT_IMAGE: url] tags - extracts images and sends them separately.
      */
     protected function sendMessage(array $config, array $context, WorkflowExecution $execution): array
     {
@@ -65,15 +66,28 @@ class WorkflowActionService
         $imageUrl = $config['image_url'] ?? null;
         $attachmentUrl = $config['attachment_url'] ?? null;
 
-        // Create message record
+        // Extract product images from [PRODUCT_IMAGE: url] tags
+        $productImages = $this->extractProductImages($message);
+        $textContent = $this->removeProductImageTags($message);
+
+        // Combine explicit image_url with extracted product images
+        $allImages = [];
+        if ($imageUrl) {
+            $allImages[] = $imageUrl;
+        }
+        $allImages = array_merge($allImages, array_slice($productImages, 0, 10)); // Limit to 10
+
+        // Create message record (with clean text content)
         $messageModel = \App\Models\Message::create([
             'conversation_id' => $conversation->id,
             'sender_type' => 'system', // Workflow messages are system messages
-            'content' => $message,
-            'media_urls' => $imageUrl ? [['type' => 'image', 'url' => $imageUrl]] : null,
+            'content' => $textContent,
+            'message_type' => !empty($allImages) ? 'text_with_images' : 'text',
+            'media_urls' => !empty($allImages) ? array_map(fn($url) => ['type' => 'image', 'url' => $url], $allImages) : null,
             'metadata' => [
                 'workflow_execution_id' => $execution->id,
                 'is_automated' => true,
+                'product_images_sent' => count($allImages),
             ],
         ]);
 
@@ -83,19 +97,94 @@ class WorkflowActionService
             if ($connection && $connection->is_active) {
                 $platform = $connection->messagingPlatform->slug ?? $connection->platform;
                 $handler = MessageHandlerFactory::create($platform);
-                $handler->sendMessage($connection, $conversation->customer->platform_user_id, $message);
+
+                // For Facebook, WhatsApp, Telegram, LINE: send images first, then text
+                if (in_array($platform, ['facebook', 'whatsapp', 'telegram', 'line'])) {
+                    foreach ($allImages as $imgUrl) {
+                        try {
+                            $handler->sendImage(
+                                $connection,
+                                $conversation->customer->platform_user_id,
+                                $imgUrl
+                            );
+                            Log::info('WorkflowActionService: Product image sent', [
+                                'conversation_id' => $conversation->id,
+                                'image_url' => $imgUrl,
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::warning('WorkflowActionService: Failed to send product image', [
+                                'conversation_id' => $conversation->id,
+                                'image_url' => $imgUrl,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+                    if (!empty(trim($textContent))) {
+                        $handler->sendMessage($connection, $conversation->customer->platform_user_id, $textContent);
+                    }
+                } else {
+                    // Default: send text first, then images
+                    if (!empty(trim($textContent))) {
+                        $handler->sendMessage($connection, $conversation->customer->platform_user_id, $textContent);
+                    }
+                    foreach ($allImages as $imgUrl) {
+                        try {
+                            $handler->sendImage(
+                                $connection,
+                                $conversation->customer->platform_user_id,
+                                $imgUrl
+                            );
+                        } catch (\Exception $e) {
+                            Log::warning('WorkflowActionService: Failed to send product image', [
+                                'conversation_id' => $conversation->id,
+                                'image_url' => $imgUrl,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+                }
             }
 
             return [
                 'success' => true,
                 'message_id' => $messageModel->id,
                 'sent_at' => now()->toIso8601String(),
-                'context' => ['message_sent' => true],
+                'context' => ['message_sent' => true, 'images_sent' => count($allImages)],
             ];
         } catch (\Exception $e) {
             Log::error("Failed to send workflow message: {$e->getMessage()}");
             throw $e;
         }
+    }
+
+    /**
+     * Extract product image URLs from AI response
+     * Looks for pattern: [PRODUCT_IMAGE: url]
+     */
+    protected function extractProductImages(string $content): array
+    {
+        $images = [];
+
+        if (preg_match_all('/\[PRODUCT_IMAGE:\s*([^\]]+)\]/i', $content, $matches)) {
+            foreach ($matches[1] as $url) {
+                $url = trim($url);
+                if (filter_var($url, FILTER_VALIDATE_URL)) {
+                    $images[] = $url;
+                }
+            }
+        }
+
+        return $images;
+    }
+
+    /**
+     * Remove product image tags from content
+     */
+    protected function removeProductImageTags(string $content): string
+    {
+        $cleaned = preg_replace('/\[PRODUCT_IMAGE:\s*[^\]]+\]\s*/i', '', $content);
+        $cleaned = preg_replace('/\n{3,}/', "\n\n", $cleaned);
+        return trim($cleaned);
     }
 
     /**

@@ -24,7 +24,7 @@ class AiRateLimiter
         ],
         'openai' => [
             'gpt-4o' => 10000,           // Paid tier
-            'gpt-4o-mini' => 10000,      // Paid tier
+            'gpt-5-mini' => 10000,       // Paid tier
             'gpt-4-turbo' => 10000,
             'gpt-3.5-turbo' => 10000,
         ],

@@ -158,7 +158,7 @@ class AuthController extends Controller
         AiConfiguration::create([
             'company_id' => $company->id,
             'primary_provider_id' => $openAiProvider->id,
-            'primary_model' => 'gpt-4o-mini',
+            'primary_model' => 'gpt-5-mini',
             'system_prompt' => "You are a helpful and professional customer service assistant for {$company->name}. Your goal is to assist customers with their inquiries in a friendly, professional, and efficient manner.
 
 Key guidelines:

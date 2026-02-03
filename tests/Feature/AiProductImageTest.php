@@ -44,7 +44,7 @@ class AiProductImageTest extends TestCase
         $this->aiConfig = AiConfiguration::create([
             'company_id' => $this->company->id,
             'primary_provider_id' => $provider->id,
-            'primary_model' => 'gpt-4o-mini',
+            'primary_model' => 'gpt-5-mini',
             'system_prompt' => 'You are a helpful assistant.',
             'auto_respond' => true,
             'response_delay_seconds' => 1, // Short delay for testing
@@ -244,7 +244,7 @@ class AiProductImageTest extends TestCase
                 'id' => 'chatcmpl-test',
                 'object' => 'chat.completion',
                 'created' => time(),
-                'model' => 'gpt-4o-mini',
+                'model' => 'gpt-5-mini',
                 'choices' => [
                     [
                         'index' => 0,
@@ -323,7 +323,7 @@ class AiProductImageTest extends TestCase
                 'id' => 'chatcmpl-test',
                 'object' => 'chat.completion',
                 'created' => time(),
-                'model' => 'gpt-4o-mini',
+                'model' => 'gpt-5-mini',
                 'choices' => [
                     [
                         'index' => 0,
@@ -395,7 +395,7 @@ class AiProductImageTest extends TestCase
                 'id' => 'chatcmpl-test',
                 'object' => 'chat.completion',
                 'created' => time(),
-                'model' => 'gpt-4o-mini',
+                'model' => 'gpt-5-mini',
                 'choices' => [
                     [
                         'index' => 0,
@@ -489,7 +489,7 @@ class AiProductImageTest extends TestCase
                 'id' => 'chatcmpl-test',
                 'object' => 'chat.completion',
                 'created' => time(),
-                'model' => 'gpt-4o-mini',
+                'model' => 'gpt-5-mini',
                 'choices' => [
                     [
                         'index' => 0,

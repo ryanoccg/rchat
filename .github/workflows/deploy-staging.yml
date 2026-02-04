@@ -1,0 +1,125 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo, pdo_mysql, bcmath, gd, zip, redis
+          coverage: none
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Copy .env file
+        run: cp .env.example .env
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Generate application key
+        run: php artisan key:generate
+
+      - name: Create sqlite database for testing
+        run: |
+          touch database/database.sqlite
+          php artisan migrate:fresh --seed --force
+
+      - name: Run PHPUnit tests
+        run: vendor/bin/phpunit
+        continue-on-error: false
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.STAGING_SSH_USERNAME }}
+          SSH_PORT: ${{ secrets.STAGING_SSH_PORT || 22 }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p $SSH_PORT $SSH_HOST >> ~/.ssh/known_hosts
+          cat >> ~/.ssh/config <<EOF
+          Host deploy-server
+              HostName $SSH_HOST
+              User $SSH_USERNAME
+              Port $SSH_PORT
+              IdentityFile ~/.ssh/deploy_key
+              StrictHostKeyChecking no
+          EOF
+
+      - name: Deploy to staging server
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        run: |
+          # Sync files to server
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='vendor' \
+            --exclude='.env' \
+            --exclude='storage' \
+            --exclude='bootstrap/cache' \
+            -e "ssh -p ${{ secrets.STAGING_SSH_PORT || 22 }} -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.STAGING_SSH_USERNAME }}@$SSH_HOST:$DEPLOY_PATH/
+
+      - name: Install dependencies and run migrations on staging
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.STAGING_SSH_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        run: |
+          ssh -p ${{ secrets.STAGING_SSH_PORT || 22 }} -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.STAGING_SSH_USERNAME }}@$SSH_HOST << 'ENDSSH'
+            cd ${{ secrets.STAGING_DEPLOY_PATH }}
+
+            # Install composer dependencies
+            composer install --no-dev --optimize-autoloader --no-interaction
+
+            # Install and build frontend
+            npm ci --production
+            npm run build
+
+            # Run migrations
+            php artisan migrate --force
+
+            # Clear and cache configs
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+
+            # Set permissions
+            chmod -R 775 storage bootstrap/cache
+            chown -R ec2-user:ec2-user storage bootstrap/cache || true
+
+            # Restart queue workers (if using supervisor)
+            # sudo supervisorctl restart all:* || true
+          ENDSSH
+
+      - name: Cleanup SSH
+        run: rm -f ~/.ssh/deploy_key

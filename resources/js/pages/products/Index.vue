@@ -378,12 +378,12 @@
 
                 <div>
                     <label class="block text-sm font-medium mb-2">Price *</label>
-                    <InputNumber v-model="productForm.price" mode="currency" :currency="productForm.currency" />
+                    <InputNumber v-model="productForm.price" mode="currency" :currency="productForm.currency" placeholder="Enter price" />
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium mb-2">Sale Price</label>
-                    <InputNumber v-model="productForm.sale_price" mode="currency" :currency="productForm.currency" />
+                    <InputNumber v-model="productForm.sale_price" mode="currency" :currency="productForm.currency" placeholder="Enter sale price (optional)" />
                 </div>
 
                 <div>
@@ -626,7 +626,7 @@ const productForm = ref({
     name: '',
     sku: '',
     category_id: null,
-    price: 0,
+    price: null,
     sale_price: null,
     brand: '',
     stock_status: 'in_stock',
@@ -712,7 +712,7 @@ const resetProductForm = () => {
         name: '',
         sku: '',
         category_id: null,
-        price: 0,
+        price: null,
         sale_price: null,
         brand: '',
         stock_status: 'in_stock',
@@ -798,7 +798,7 @@ const removeProductImage = async () => {
 }
 
 const saveProduct = async () => {
-    if (!productForm.value.name || !productForm.value.price) {
+    if (!productForm.value.name || productForm.value.price === null || productForm.value.price === undefined) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Name and price are required', life: 3000 })
         return
     }

@@ -248,13 +248,20 @@ class ProcessDelayedAiResponse implements ShouldQueue
                 $productImages = $this->extractProductImages($responseContent);
                 $textContent = $this->removeProductImageTags($responseContent);
 
+                // ALWAYS remove appointment booking tags from displayed content first
+                // (tag should never be shown to users regardless of booking success)
+                $hasAppointmentTag = str_contains(strtolower($textContent), '[book_appointment:');
+                $textContent = $this->removeAppointmentBookingTags($textContent);
+
                 // Process appointment booking if present
-                $appointmentData = $this->extractAppointmentBooking($textContent);
+                $appointmentData = $this->extractAppointmentBooking($responseContent); // Use original response content for extraction
                 $bookedAppointment = null;
 
                 Log::channel('ai')->info('ProcessDelayedAiResponse: Appointment extraction check', [
                     'conversation_id' => $conversation->id,
+                    'has_appointment_tag' => $hasAppointmentTag,
                     'has_appointment_data' => !empty($appointmentData),
+                    'appointment_data' => $appointmentData,
                 ]);
 
                 if ($appointmentData) {
@@ -262,13 +269,16 @@ class ProcessDelayedAiResponse implements ShouldQueue
                         $appointmentData,
                         $conversation
                     );
-                    // Remove the booking tag from text content (always remove if found)
-                    $textContent = $this->removeAppointmentBookingTags($textContent);
 
                     Log::channel('ai')->info('ProcessDelayedAiResponse: Appointment processing complete', [
                         'conversation_id' => $conversation->id,
                         'booked' => !empty($bookedAppointment),
                         'appointment_id' => $bookedAppointment?->id,
+                    ]);
+                } elseif ($hasAppointmentTag) {
+                    Log::channel('ai')->warning('ProcessDelayedAiResponse: Appointment tag found but extraction failed', [
+                        'conversation_id' => $conversation->id,
+                        'original_content_preview' => substr($responseContent, 0, 500),
                     ]);
                 }
 

@@ -1,10 +1,9 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useCalendarStore } from '../../stores/calendar'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
-import { useRoute } from 'vue-router'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
@@ -18,10 +17,8 @@ import Dialog from 'primevue/dialog'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ConfirmDialog from 'primevue/confirmdialog'
-import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 
-const router = useRouter()
 const store = useCalendarStore()
 const toast = useToast()
 const confirm = useConfirm()
@@ -416,9 +413,9 @@ function getStatusSeverity(status) {
                                         v-model="settingsForm.buffer_time"
                                         :min="0"
                                         :max="60"
-                                        class="w-24"
+                                        class="flex-shrink-0"
                                     />
-                                    <span class="text-surface-500">minutes</span>
+                                    <span class="text-surface-500 whitespace-nowrap flex-shrink-0">minutes</span>
                                 </div>
                             </div>
 
@@ -429,9 +426,9 @@ function getStatusSeverity(status) {
                                         v-model="settingsForm.advance_booking_days"
                                         :min="1"
                                         :max="90"
-                                        class="w-24"
+                                        class="flex-shrink-0"
                                     />
-                                    <span class="text-surface-500 whitespace-nowrap">days in advance</span>
+                                    <span class="text-surface-500 whitespace-nowrap flex-shrink-0">days in advance</span>
                                 </div>
                             </div>
 
@@ -442,9 +439,9 @@ function getStatusSeverity(status) {
                                         v-model="settingsForm.min_notice_hours"
                                         :min="1"
                                         :max="168"
-                                        class="w-24"
+                                        class="flex-shrink-0"
                                     />
-                                    <span class="text-surface-500">hours before appointment</span>
+                                    <span class="text-surface-500 whitespace-nowrap flex-shrink-0">hours before appointment</span>
                                 </div>
                             </div>
 
@@ -479,13 +476,13 @@ function getStatusSeverity(status) {
                                     <InputText
                                         v-model="settingsForm.working_hours[day.key].start"
                                         type="time"
-                                        class="w-28"
+                                        class="w-36"
                                     />
                                     <span class="text-surface-500">to</span>
                                     <InputText
                                         v-model="settingsForm.working_hours[day.key].end"
                                         type="time"
-                                        class="w-28"
+                                        class="w-36"
                                     />
                                 </template>
                                 <span v-else class="text-surface-400">Closed</span>
@@ -523,19 +520,7 @@ function getStatusSeverity(status) {
 
             <!-- Upcoming Appointments -->
             <Card>
-                <template #title>
-                    <div class="flex items-center justify-between">
-                        <span>Upcoming Appointments</span>
-                        <Button
-                            label="View All"
-                            icon="pi pi-external-link"
-                            link
-                            size="small"
-                            iconPos="right"
-                            @click="router.push('/appointments')"
-                        />
-                    </div>
-                </template>
+                <template #title>Upcoming Appointments</template>
                 <template #content>
                     <DataTable
                         :value="store.upcomingAppointments"

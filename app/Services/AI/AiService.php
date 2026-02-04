@@ -682,6 +682,29 @@ class AiService
                 $prompt .= " | Email: {$customer->email}";
             }
             $prompt .= "\n";
+
+            // Include previous conversation summaries for returning customers
+            $previousSummaries = $this->getPreviousConversationSummaries($customer);
+            if (!empty($previousSummaries)) {
+                $prompt .= "\n# PREVIOUS INTERACTIONS (use for context)\n";
+                $prompt .= "This customer has chatted with us before. Here's what we know:\n\n";
+
+                foreach ($previousSummaries as $index => $summary) {
+                    $prompt .= "**Conversation " . ($index + 1) . " ({$summary['date']}):**\n";
+                    if (!empty($summary['summary'])) {
+                        $prompt .= "- Summary: {$summary['summary']}\n";
+                    }
+                    if (!empty($summary['last_request'])) {
+                        $prompt .= "- Last request: {$summary['last_request']}\n";
+                    }
+                    if (!empty($summary['keywords'])) {
+                        $prompt .= "- Topics: " . implode(', ', $summary['keywords']) . "\n";
+                    }
+                    $prompt .= "\n";
+                }
+
+                $prompt .= "Use this context to personalize your responses. Reference past purchases or requests when relevant.\n\n";
+            }
         }
 
         // Appointment booking context
@@ -1114,5 +1137,47 @@ class AiService
         }
 
         return ['should_search' => false, 'reason' => 'no_product_intent'];
+    }
+
+    /**
+     * Get previous conversation summaries for returning customers
+     * This provides context from past interactions
+     */
+    protected function getPreviousConversationSummaries($customer): array
+    {
+        if (!$customer || !$customer->id) {
+            return [];
+        }
+
+        try {
+            $summaries = \App\Models\ConversationSummary::whereHas('conversation', function ($query) use ($customer) {
+                $query->where('customer_id', $customer->id)
+                      ->where('company_id', $this->company->id);
+            })
+            ->where('is_ai_generated', true)
+            ->orderBy('updated_at', 'desc')
+            ->limit(3)
+            ->get();
+
+            if ($summaries->isEmpty()) {
+                return [];
+            }
+
+            return $summaries->map(function ($summary) {
+                return [
+                    'summary' => $summary->summary,
+                    'key_points' => $summary->key_points ?? [],
+                    'keywords' => $summary->keywords ?? [],
+                    'last_request' => $summary->last_request,
+                    'date' => $summary->updated_at->format('M j, Y'),
+                ];
+            })->toArray();
+        } catch (\Exception $e) {
+            Log::channel('ai')->warning('AiService: Failed to fetch previous summaries', [
+                'customer_id' => $customer->id,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
     }
 }

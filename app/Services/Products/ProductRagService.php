@@ -181,6 +181,7 @@ class ProductRagService
         }
 
         // Search across name, description, and brand for any matching keyword
+        // Order by featured first, then on-sale, then relevance
         $products = $baseQuery->where(function ($q) use ($keywords) {
             foreach ($keywords as $keyword) {
                 $q->orWhere('name', 'like', "%{$keyword}%")
@@ -191,6 +192,8 @@ class ProductRagService
             }
         })
         ->with('category')
+        ->orderByDesc('is_featured')
+        ->orderByRaw('CASE WHEN sale_price IS NOT NULL AND sale_price > 0 AND sale_price < price THEN 1 ELSE 0 END DESC')
         ->take($limit)
         ->get();
 
@@ -277,6 +280,25 @@ class ProductRagService
             $imageUrl = rtrim(url('/'), '/') . $imageUrl;
         }
 
+        // Apply priority boosts for featured and on-sale products
+        $boostedScore = $score;
+        $boostReasons = [];
+
+        // Featured products get priority boost
+        if ($product->is_featured) {
+            $boostedScore += 0.15;
+            $boostReasons[] = 'featured';
+        }
+
+        // Products on sale get priority boost
+        if ($product->is_on_sale) {
+            $boostedScore += 0.10;
+            $boostReasons[] = 'on_sale';
+        }
+
+        // Cap score at 1.0
+        $boostedScore = min($boostedScore, 1.0);
+
         return [
             'product_id' => $product->id,
             'name' => $product->name,
@@ -289,10 +311,13 @@ class ProductRagService
             'category' => $product->category?->name,
             'stock_status' => $product->stock_status,
             'is_on_sale' => $product->is_on_sale,
+            'is_featured' => $product->is_featured,
             'discount_percentage' => $product->discount_percentage,
             'image' => $imageUrl,
             'specifications' => $product->specifications,
-            'relevance_score' => $score,
+            'relevance_score' => $boostedScore,
+            'original_score' => $score,
+            'boost_reasons' => $boostReasons,
             'match_type' => $matchType,
         ];
     }
@@ -307,12 +332,29 @@ class ProductRagService
         }
 
         $context = "# Available Products\n\n";
+        $context .= "**Note:** Products marked as FEATURED should be prioritized in recommendations. Products ON SALE are good value options to highlight.\n\n";
 
         foreach ($products as $index => $product) {
-            $context .= "## " . ($index + 1) . ". {$product['name']}\n";
+            // Add badges for featured and on-sale products
+            $badges = [];
+            if (!empty($product['is_featured'])) {
+                $badges[] = 'FEATURED';
+            }
+            if ($product['is_on_sale']) {
+                $badges[] = 'ON SALE';
+            }
+            $badgeStr = !empty($badges) ? ' [' . implode(', ', $badges) . ']' : '';
+
+            $context .= "## " . ($index + 1) . ". {$product['name']}{$badgeStr}\n";
+
+            // Featured instruction
+            if (!empty($product['is_featured'])) {
+                $context .= "- **FEATURED - Prioritize recommending!**\n";
+            }
+
             $context .= "- Price: {$product['formatted_price']}";
             if ($product['is_on_sale']) {
-                $context .= " (was {$product['currency']} {$product['price']}, {$product['discount_percentage']}% off)";
+                $context .= " (was {$product['currency']} {$product['price']}, {$product['discount_percentage']}% off - GREAT DEAL!)";
             }
             $context .= "\n";
 

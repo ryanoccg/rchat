@@ -86,6 +86,7 @@ class Workflow extends Model
             'message_received' => isset($eventData['message']) && $eventData['message']['sender_type'] === 'customer',
             'no_response' => isset($eventData['conversation']) && $eventData['conversation']->last_message_at?->lt(now()->subMinutes($this->trigger_config['no_response_minutes'] ?? 60)),
             'scheduled' => $this->isScheduleDue(),
+            'auto_follow_up' => isset($eventData['conversation']) && ($eventData['trigger_source'] ?? null) === 'auto_follow_up',
             default => false,
         };
     }

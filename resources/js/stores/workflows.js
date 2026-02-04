@@ -65,7 +65,8 @@ export const useWorkflowsStore = defineStore('workflows', {
             { value: 'conversation_closed', label: 'Conversation Closed', description: 'When a conversation is closed' },
             { value: 'message_received', label: 'Message Received', description: 'When a customer message is received' },
             { value: 'no_response', label: 'No Response', description: 'When no response after X minutes' },
-            { value: 'scheduled', label: 'Scheduled', description: 'Run on a schedule' }
+            { value: 'scheduled', label: 'Scheduled', description: 'Run on a schedule' },
+            { value: 'auto_follow_up', label: 'Auto Follow-up', description: 'Automatically follow up on inactive conversations' }
         ],
 
         stepTypes: () => [

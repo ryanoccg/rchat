@@ -11,6 +11,8 @@ class ConversationSummary extends Model
         'summary',
         'key_points',
         'action_items',
+        'keywords',
+        'last_request',
         'resolution',
         'generated_by',
         'is_ai_generated',
@@ -21,6 +23,7 @@ class ConversationSummary extends Model
         return [
             'key_points' => 'array',
             'action_items' => 'array',
+            'keywords' => 'array',
             'is_ai_generated' => 'boolean',
         ];
     }

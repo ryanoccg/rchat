@@ -179,13 +179,12 @@
     </div>
 
     <!-- Media Grid View -->
-    <div v-else-if="currentView === 'grid'" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+    <div v-else-if="currentView === 'grid'" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
       <div
         v-for="item in items"
         :key="item.id"
-        class="media-item group relative"
-        :class="{ 'ring-2 ring-primary-500': isSelected(item.id) }"
-        @click="openPreview(item)"
+        class="media-card group relative bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 shadow-sm hover:shadow-lg transition-all duration-200"
+        :class="{ 'ring-2 ring-primary-500 border-primary-500': isSelected(item.id) }"
       >
         <!-- Selection Checkbox -->
         <div
@@ -195,11 +194,20 @@
           <Checkbox
             :modelValue="isSelected(item.id)"
             @change="toggleSelect(item.id)"
+            class="bg-white/90 dark:bg-surface-900/90 rounded"
           />
         </div>
 
+        <!-- Type Badge -->
+        <div class="absolute top-2 right-2 z-10">
+          <Tag :value="item.media_type" :severity="getTypeSeverity(item.media_type)" size="small" />
+        </div>
+
         <!-- Media Thumbnail -->
-        <div class="aspect-square bg-surface-100 dark:bg-surface-800 rounded-lg overflow-hidden">
+        <div
+          class="aspect-square bg-surface-100 dark:bg-surface-900 rounded-t-xl overflow-hidden cursor-pointer relative"
+          @click="openPreview(item)"
+        >
           <img
             v-if="item.is_image"
             :src="item.thumbnail_url || item.url"
@@ -213,40 +221,60 @@
           >
             <i :class="getFileIcon(item.mime_type)" class="text-4xl text-surface-400" />
           </div>
-        </div>
 
-        <!-- Overlay -->
-        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
-          <Button
-            icon="pi pi-eye"
-            rounded
-            size="small"
-            @click.stop="openPreview(item)"
-          />
-          <Button
-            icon="pi pi-pencil"
-            rounded
-            severity="secondary"
-            size="small"
-            @click.stop="openEditModal(item)"
-          />
-          <Button
-            icon="pi pi-trash"
-            rounded
-            severity="danger"
-            size="small"
-            @click.stop="confirmDelete(item)"
-          />
+          <!-- Overlay for desktop -->
+          <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 hidden md:flex items-end justify-center pb-4 gap-2">
+            <Button
+              icon="pi pi-eye"
+              rounded
+              size="small"
+              class="bg-white/90 hover:bg-white text-surface-900"
+              @click.stop="openPreview(item)"
+              v-tooltip.top="'Preview'"
+            />
+            <Button
+              icon="pi pi-pencil"
+              rounded
+              size="small"
+              class="bg-white/90 hover:bg-white text-surface-900"
+              @click.stop="openEditModal(item)"
+              v-tooltip.top="'Edit'"
+            />
+            <Button
+              icon="pi pi-copy"
+              rounded
+              size="small"
+              class="bg-white/90 hover:bg-white text-surface-900"
+              @click.stop="copyUrl(item.url)"
+              v-tooltip.top="'Copy URL'"
+            />
+            <Button
+              icon="pi pi-trash"
+              rounded
+              size="small"
+              class="bg-red-500/90 hover:bg-red-500 text-white"
+              @click.stop="confirmDelete(item)"
+              v-tooltip.top="'Delete'"
+            />
+          </div>
         </div>
 
         <!-- File Info -->
-        <div class="mt-2">
-          <p class="text-sm font-medium truncate" :title="item.file_name">
+        <div class="p-3">
+          <p class="text-sm font-medium truncate text-surface-900 dark:text-surface-0" :title="item.file_name">
             {{ item.file_name }}
           </p>
-          <p class="text-xs text-surface-500">
+          <p class="text-xs text-surface-500 mt-1">
             {{ item.human_size }}
           </p>
+
+          <!-- Mobile action buttons - always visible -->
+          <div class="flex items-center justify-between mt-3 md:hidden">
+            <Button icon="pi pi-eye" text size="small" @click.stop="openPreview(item)" v-tooltip.top="'Preview'" />
+            <Button icon="pi pi-pencil" text size="small" @click.stop="openEditModal(item)" v-tooltip.top="'Edit'" />
+            <Button icon="pi pi-copy" text size="small" @click.stop="copyUrl(item.url)" v-tooltip.top="'Copy URL'" />
+            <Button icon="pi pi-trash" text size="small" severity="danger" @click.stop="confirmDelete(item)" v-tooltip.top="'Delete'" />
+          </div>
         </div>
       </div>
     </div>
@@ -895,16 +923,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.media-item {
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+.media-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.media-item:hover {
-  transform: translateY(-2px);
+.media-card:hover {
+  transform: translateY(-4px);
 }
 
-.media-item .p-checkbox {
+.media-card .p-checkbox {
   pointer-events: auto;
+}
+
+/* Better focus states for accessibility */
+.media-card:focus-within {
+  outline: 2px solid var(--p-primary-500);
+  outline-offset: 2px;
 }
 </style>

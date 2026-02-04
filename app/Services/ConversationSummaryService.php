@@ -39,6 +39,8 @@ class ConversationSummaryService
                     'summary' => 'No messages in this conversation.',
                     'key_points' => [],
                     'action_items' => [],
+                    'keywords' => [],
+                    'last_request' => null,
                     'resolution' => null,
                     'generated_by' => $userId,
                     'is_ai_generated' => false,
@@ -98,6 +100,8 @@ class ConversationSummaryService
                         'summary' => $summaryData['summary'],
                         'key_points' => $summaryData['key_points'],
                         'action_items' => $summaryData['action_items'],
+                        'keywords' => $summaryData['keywords'] ?? [],
+                        'last_request' => $summaryData['last_request'] ?? null,
                         'resolution' => $summaryData['resolution'],
                         'generated_by' => $userId,
                         'is_ai_generated' => true,
@@ -182,6 +186,12 @@ Your response MUST be in this EXACT JSON format:
     \"action_items\": [
         \"Category tag that best describes this request (choose ONE)\"
     ],
+    \"keywords\": [
+        \"keyword1\",
+        \"keyword2\",
+        \"keyword3\"
+    ],
+    \"last_request\": \"The customer's most recent specific request or question\",
     \"resolution\": \"YES or NO - Does this need human agent handling?\"
 }
 
@@ -203,7 +213,11 @@ RULES:
    
    IMPORTANT: Choose or create a category that matches the company's actual services. If the request relates to a specific service this company offers, use that service name as the category.
 
-4. RESOLUTION: Analyze if this needs HUMAN AGENT handling:
+4. KEYWORDS: Extract 3-6 relevant keywords/topics from the conversation. These help identify what the customer is interested in. Examples: product names, service types, issues mentioned, preferences.
+
+5. LAST_REQUEST: Capture the customer's most recent specific request or question. This is useful for follow-up conversations. Be specific about what they wanted.
+
+6. RESOLUTION: Analyze if this needs HUMAN AGENT handling:
    - Answer \"YES\" if:
      * Complex technical issue AI cannot solve
      * Customer explicitly wants human agent
@@ -245,6 +259,8 @@ Customer: {$conversation->customer?->name}{$knowledgeContext}{$existingKeyPoints
                     'summary' => $data['summary'] ?? 'Summary not available',
                     'key_points' => $data['key_points'] ?? [],
                     'action_items' => $data['action_items'] ?? [],
+                    'keywords' => $data['keywords'] ?? [],
+                    'last_request' => $data['last_request'] ?? null,
                     'resolution' => $data['resolution'] ?? null,
                 ];
             }
@@ -260,6 +276,8 @@ Customer: {$conversation->customer?->name}{$knowledgeContext}{$existingKeyPoints
             'summary' => substr($content, 0, 500),
             'key_points' => [],
             'action_items' => [],
+            'keywords' => [],
+            'last_request' => null,
             'resolution' => null,
         ];
     }

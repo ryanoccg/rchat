@@ -23,16 +23,19 @@ class WorkflowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Seed required data
         $this->seed(\Database\Seeders\MessagingPlatformSeeder::class);
-        
+
         $this->company = Company::factory()->create();
         $this->user = User::factory()->create([
             'current_company_id' => $this->company->id,
         ]);
         $this->user->companies()->attach($this->company->id, ['role' => 'Company Admin']);
-        
+
+        // Delete auto-created workflows from CompanyObserver for clean test state
+        Workflow::where('company_id', $this->company->id)->delete();
+
         Sanctum::actingAs($this->user);
     }
 

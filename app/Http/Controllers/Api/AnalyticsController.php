@@ -16,6 +16,36 @@ use Illuminate\Support\Facades\DB;
 class AnalyticsController extends Controller
 {
     /**
+     * Get database-agnostic date format SQL
+     */
+    protected function getDateFormatSql(string $column, string $format): string
+    {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            // Convert MySQL format to SQLite strftime format
+            $sqliteFormat = str_replace(
+                ['%Y', '%m', '%d', '%u'],
+                ['%Y', '%m', '%d', '%W'],
+                $format
+            );
+            return "strftime('{$sqliteFormat}', {$column})";
+        }
+
+        return "DATE_FORMAT({$column}, '{$format}')";
+    }
+
+    /**
+     * Get database-agnostic hour extraction SQL
+     */
+    protected function getHourSql(string $column): string
+    {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return "CAST(strftime('%H', {$column}) AS INTEGER)";
+        }
+
+        return "HOUR({$column})";
+    }
+
+    /**
      * Get overview statistics
      */
     public function overview(Request $request)
@@ -102,7 +132,7 @@ class AnalyticsController extends Controller
         $trends = Conversation::where('company_id', $companyId)
             ->where('created_at', '>=', $startDate)
             ->select(
-                DB::raw("DATE_FORMAT(created_at, '{$dateFormat}') as date"),
+                DB::raw($this->getDateFormatSql('created_at', $dateFormat) . ' as date'),
                 DB::raw('count(*) as total'),
                 DB::raw("SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as resolved"),
                 DB::raw("SUM(CASE WHEN is_ai_handling = 1 THEN 1 ELSE 0 END) as ai_handled")
@@ -142,7 +172,7 @@ class AnalyticsController extends Controller
         })
             ->where('created_at', '>=', $startDate)
             ->select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m-%d') as date"),
+                DB::raw($this->getDateFormatSql('created_at', '%Y-%m-%d') . ' as date'),
                 DB::raw("SUM(CASE WHEN sentiment = 'positive' THEN 1 ELSE 0 END) as positive"),
                 DB::raw("SUM(CASE WHEN sentiment = 'neutral' THEN 1 ELSE 0 END) as neutral"),
                 DB::raw("SUM(CASE WHEN sentiment = 'negative' THEN 1 ELSE 0 END) as negative"),
@@ -203,7 +233,7 @@ class AnalyticsController extends Controller
         })
             ->where('created_at', '>=', $startDate)
             ->select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m-%d') as date"),
+                DB::raw($this->getDateFormatSql('created_at', '%Y-%m-%d') . ' as date'),
                 DB::raw('avg(rating) as avg_rating'),
                 DB::raw('count(*) as count')
             )
@@ -333,7 +363,7 @@ class AnalyticsController extends Controller
         $hourlyData = Conversation::where('company_id', $companyId)
             ->where('created_at', '>=', $startDate)
             ->select(
-                DB::raw('HOUR(created_at) as hour'),
+                DB::raw($this->getHourSql('created_at') . ' as hour'),
                 DB::raw('count(*) as count')
             )
             ->groupBy('hour')
@@ -412,8 +442,12 @@ class AnalyticsController extends Controller
      */
     protected function calculateAverageResponseTime(int $companyId, Carbon $startDate): float
     {
-        // This would calculate time between customer message and agent/AI response
-        // Simplified implementation - in production would query message timestamps
+        // SQLite doesn't support TIMESTAMPDIFF, use PHP-based calculation
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return $this->calculateAverageResponseTimePhp($companyId, $startDate);
+        }
+
+        // MySQL version with TIMESTAMPDIFF
         $avgMinutes = Message::whereHas('conversation', function ($q) use ($companyId) {
             $q->where('company_id', $companyId);
         })
@@ -422,6 +456,39 @@ class AnalyticsController extends Controller
             ->avg(DB::raw("TIMESTAMPDIFF(SECOND, (SELECT created_at FROM messages m2 WHERE m2.conversation_id = messages.conversation_id AND m2.sender_type = 'customer' AND m2.created_at < messages.created_at ORDER BY m2.created_at DESC LIMIT 1), created_at) / 60"));
 
         return round($avgMinutes ?? 0, 1);
+    }
+
+    /**
+     * PHP-based average response time calculation (for SQLite compatibility)
+     */
+    protected function calculateAverageResponseTimePhp(int $companyId, Carbon $startDate): float
+    {
+        $responses = Message::whereHas('conversation', function ($q) use ($companyId) {
+            $q->where('company_id', $companyId);
+        })
+            ->where('created_at', '>=', $startDate)
+            ->where('sender_type', '!=', 'customer')
+            ->with(['conversation.messages' => function ($q) {
+                $q->where('sender_type', 'customer')->orderBy('created_at', 'desc');
+            }])
+            ->get();
+
+        $totalMinutes = 0;
+        $count = 0;
+
+        foreach ($responses as $response) {
+            $customerMessage = $response->conversation->messages
+                ->where('created_at', '<', $response->created_at)
+                ->first();
+
+            if ($customerMessage) {
+                $diffMinutes = $response->created_at->diffInSeconds($customerMessage->created_at) / 60;
+                $totalMinutes += $diffMinutes;
+                $count++;
+            }
+        }
+
+        return $count > 0 ? round($totalMinutes / $count, 1) : 0;
     }
 
     /**
@@ -479,7 +546,7 @@ class AnalyticsController extends Controller
             ->where('is_from_customer', true)
             ->whereNotNull('intent')
             ->select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m-%d') as date"),
+                DB::raw($this->getDateFormatSql('created_at', '%Y-%m-%d') . ' as date'),
                 'intent',
                 DB::raw('count(*) as count')
             )

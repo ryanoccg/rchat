@@ -171,14 +171,28 @@ class RolePermissionController extends Controller
             $role->syncPermissions($validated['permissions']);
         } else {
             // Default role: store company-level override
-            DB::table('company_role_permissions')->updateOrInsert(
-                ['company_id' => $company->id, 'role_id' => $role->id],
-                [
+            $exists = DB::table('company_role_permissions')
+                ->where('company_id', $company->id)
+                ->where('role_id', $role->id)
+                ->exists();
+
+            if ($exists) {
+                DB::table('company_role_permissions')
+                    ->where('company_id', $company->id)
+                    ->where('role_id', $role->id)
+                    ->update([
+                        'permissions' => json_encode($validated['permissions']),
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                DB::table('company_role_permissions')->insert([
+                    'company_id' => $company->id,
+                    'role_id' => $role->id,
                     'permissions' => json_encode($validated['permissions']),
+                    'created_at' => now(),
                     'updated_at' => now(),
-                    'created_at' => DB::raw('COALESCE(created_at, NOW())'),
-                ]
-            );
+                ]);
+            }
         }
 
         return response()->json([

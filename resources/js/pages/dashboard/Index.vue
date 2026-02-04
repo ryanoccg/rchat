@@ -286,7 +286,7 @@ const fetchRecentConversations = async () => {
     loadingConversations.value = true
     try {
         const response = await api.get('/dashboard/recent-conversations')
-        recentConversations.value = response.data.data || []
+        recentConversations.value = response.data || []
     } catch (error) {
         console.error('Failed to fetch conversations:', error)
     } finally {

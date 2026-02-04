@@ -89,6 +89,7 @@ class DashboardController extends Controller
                 'id' => $conversation->id,
                 'status' => $conversation->status,
                 'priority' => $conversation->priority,
+                'is_ai_handling' => $conversation->is_ai_handling,
                 'last_message_at' => $conversation->last_message_at?->toISOString(),
                 'customer' => [
                     'id' => $conversation->customer->id,
